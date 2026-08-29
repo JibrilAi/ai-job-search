@@ -19,12 +19,12 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "ai_job_search_db"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "6aa3960c-aad9-4ba6-a43a-00fc97675ecf"
 migrations_dir = "../migrations"
 
 [[kv_namespaces]]
 binding = "AUTH_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "938fc2614e314a289912870735115db4"
 
 [[r2_buckets]]
 binding = "DOCUMENTS_BUCKET"
@@ -57,15 +57,11 @@ max_retries = 3
 crons = ["0 */6 * * *"]
 
 [vars]
-ENVIRONMENT = "development"
-# Before deploying to production, change this to your deployed Pages URL
-# (e.g. "https://ai-job-search.pages.dev" or your custom domain) -- the
-# Worker's CORS check rejects requests from any other origin. Deploy order:
-# 1) deploy the Worker once to get its *.workers.dev URL, 2) set that as
-# VITE_API_BASE_URL (+ "/api") in the Pages project's environment variables
-# and deploy the frontend, 3) come back here, set FRONTEND_ORIGIN to the
-# resulting Pages URL, and redeploy the Worker.
-FRONTEND_ORIGIN = "http://localhost:5173"
+ENVIRONMENT = "production"
+# Set to the deployed Pages URL -- the Worker's CORS check rejects requests
+# from any other origin. If the Pages project's URL changes (e.g. a custom
+# domain is added later), update this and redeploy the Worker.
+FRONTEND_ORIGIN = "https://ai-job-search-2hg.pages.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
 #   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY
