@@ -58,6 +58,13 @@ crons = ["0 */6 * * *"]
 
 [vars]
 ENVIRONMENT = "development"
+# Before deploying to production, change this to your deployed Pages URL
+# (e.g. "https://ai-job-search.pages.dev" or your custom domain) -- the
+# Worker's CORS check rejects requests from any other origin. Deploy order:
+# 1) deploy the Worker once to get its *.workers.dev URL, 2) set that as
+# VITE_API_BASE_URL (+ "/api") in the Pages project's environment variables
+# and deploy the frontend, 3) come back here, set FRONTEND_ORIGIN to the
+# resulting Pages URL, and redeploy the Worker.
 FRONTEND_ORIGIN = "http://localhost:5173"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
