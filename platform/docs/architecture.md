@@ -1,0 +1,103 @@
+# Architecture
+
+## Why this exists
+
+The rest of this repo is a local, single-user job-search tool driven by
+Claude Code slash-commands. This directory is a separate, hosted, multi-user
+rebuild of the same core loop (scrape -> rank -> track -> apply) on
+Cloudflare, so the workflow can run for many users without anyone's own
+machine. See the approved plan this was built from for the full decision
+record; this file is the living summary.
+
+## Request flow
+
+```
+Browser (React, Cloudflare Pages)
+  -> fetch /api/* with credentials: include (httpOnly session cookie)
+  -> Worker (Hono router) [worker/src/index.ts]
+       /api/auth      -> worker/src/routes/auth.ts
+       /api/profile   -> worker/src/routes/profile.ts
+       /api/jobs      -> worker/src/routes/jobs.ts
+       /api/rankings  -> worker/src/routes/rankings.ts
+  -> D1 (ai_job_search_db) for all reads/writes
+```
+
+## Background pipelines
+
+```
+Cron Trigger (every 6h, no arguments)
+  -> scheduled() reads enabled scrape_queries rows
+  -> enqueues one message per row onto SCRAPE_QUEUE
+
+SCRAPE_QUEUE consumer (queue-consumers/scrapeConsumer.ts)
+  -> runs the named portal's scraper (lib/scrapers/<portal>.ts)
+  -> upserts each result into `jobs`, deduped on dedupe_key
+  -> for genuinely new jobs, enqueues one message per (active user x new job)
+     onto RANK_QUEUE
+
+RANK_QUEUE consumer (queue-consumers/rankConsumer.ts)
+  -> loads the job + that user's profile
+  -> calls the Claude API (lib/ranking/claudeClient.ts) with a forced
+     submit_ranking tool call, reproducing 04-job-evaluation.md's rubric
+  -> computes the weighted score server-side (never trusts the model's math)
+  -> writes to user_job_rankings
+```
+
+Shared scrape, per-user matching (see README/plan): the `jobs` table is one
+shared pool scraped once; `user_job_rankings` is the per-user fan-out. This
+is why a new job costs one scrape but N ranking calls (one per user with a
+profile) -- the plan's cost-mitigation notes (prompt caching, pre-filtering)
+apply here as usage grows.
+
+## Data model
+
+See `migrations/0001`..`0005` for the authoritative schema. Summary:
+
+| Table | Owner | Purpose |
+|---|---|---|
+| `users`, `sessions` | auth routes | accounts, session tokens (not JWTs -- revocation is a DELETE) |
+| `profiles` | profile routes | one row per user, mirrors CLAUDE.md's Candidate Profile |
+| `jobs` | scrape consumer | shared job pool, deduped on `dedupe_key` |
+| `scrape_queries` | scheduled handler | what the Cron handler tells the scrape queue to do |
+| `user_job_rankings` | rank consumer | per-(user, job) AI score, verdict, gate results |
+| `applications`, `company_research_cache`, `salary_data` | applications/companyResearch/salary routes | tracker + shared reference caches |
+| `cv_templates`, `cover_letter_templates`, `generated_documents` | documents routes | seeded default templates; MVP rendering is code-driven (`lib/documents/{cvTemplate,coverLetterTemplate}.ts`), not read from these tables' html_source/css_source |
+
+## Frontend
+
+`frontend/src/App.tsx` wires React Router routes behind a session-cookie
+`RequireAuth` guard (`frontend/src/components/RequireAuth.tsx`). API calls go
+through `frontend/src/api/client.ts`, a thin typed fetch wrapper -- there is
+no client-side state library; each route fetches what it needs with
+`useEffect`.
+
+## Document generation (Phase 5)
+
+`worker/src/routes/documents.ts`:
+- `POST /api/documents/cv` -- renders `lib/documents/cvTemplate.ts` (profile
+  data only) to HTML, calls `lib/documents/browserRender.ts` (Browser
+  Rendering API via `@cloudflare/puppeteer`) for a PDF, verifies the text
+  layer with `lib/documents/verifyPdf.ts` (`unpdf`), uploads to R2, records a
+  `generated_documents` row.
+- `POST /api/documents/cover-letter` -- additionally calls
+  `lib/documents/coverLetterDraft.ts` (a Claude API call, same forced
+  tool-use pattern as ranking) to draft the letter's prose before rendering.
+- Both routes verify against **a copy** of the PDF buffer
+  (`pdf.slice(0)`) before uploading the original to R2 -- `unpdf`/pdf.js
+  detaches the buffer it's given, so verifying first and uploading the same
+  reference afterward silently produces a 0-byte R2 object. Found by testing
+  against a real generated PDF; see platform/README.md.
+
+Fonts (`lib/documents/fonts.ts`) are base64-encoded from the project's actual
+`cover_letters/OpenFonts/fonts/{lato,raleway}/` files and embedded as
+`@font-face` data URIs, so Browser Rendering never needs an external font
+fetch.
+
+## What's deliberately not built yet
+
+- LinkedIn and the four Danish portals' scrapers -- ported the same way as
+  `lib/scrapers/freehire.ts`, registered in `lib/scrapers/registry.ts`, but
+  deferred (LinkedIn especially, given anti-scraping risk at platform scale).
+- Vectorize (semantic job search/dedupe) -- exact-key dedupe covers MVP.
+- Gmail sync, Notion sync -- would need Worker-side OAuth, out of scope for
+  now.

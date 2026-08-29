@@ -1,0 +1,64 @@
+name = "ai-job-search-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-05"
+compatibility_flags = ["nodejs_compat"]
+
+# ---------------------------------------------------------------------------
+# Setup (one-time, per Cloudflare account):
+#   wrangler d1 create ai_job_search_db          -> paste database_id below
+#   wrangler kv namespace create AUTH_KV         -> paste id below
+#   wrangler r2 bucket create ai-job-search-documents
+#   wrangler queues create scrape-portal-queue
+#   wrangler queues create rank-job-queue
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put SESSION_SECRET
+#   wrangler secret put MAGIC_LINK_SECRET
+#   wrangler secret put RESEND_API_KEY
+# ---------------------------------------------------------------------------
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ai_job_search_db"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+migrations_dir = "../migrations"
+
+[[kv_namespaces]]
+binding = "AUTH_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[[r2_buckets]]
+binding = "DOCUMENTS_BUCKET"
+bucket_name = "ai-job-search-documents"
+
+[browser]
+binding = "BROWSER"
+
+[[queues.producers]]
+binding = "SCRAPE_QUEUE"
+queue = "scrape-portal-queue"
+
+[[queues.producers]]
+binding = "RANK_QUEUE"
+queue = "rank-job-queue"
+
+[[queues.consumers]]
+queue = "scrape-portal-queue"
+max_batch_size = 5
+max_retries = 3
+
+[[queues.consumers]]
+queue = "rank-job-queue"
+max_batch_size = 10
+max_retries = 3
+
+# Scrapes every 6 hours. Cron Triggers take no arguments -- the handler reads
+# `scrape_queries` (D1) and fans work out onto SCRAPE_QUEUE.
+[triggers]
+crons = ["0 */6 * * *"]
+
+[vars]
+ENVIRONMENT = "development"
+FRONTEND_ORIGIN = "http://localhost:5173"
+
+# Secrets (set via `wrangler secret put <NAME>`, never committed here):
+#   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY
