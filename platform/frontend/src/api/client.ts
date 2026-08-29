@@ -1,6 +1,14 @@
 // Thin fetch client for the Worker API. Session auth is an httpOnly cookie
 // (never touched from JS), so every call sends credentials and expects the
 // Worker's CORS config (FRONTEND_ORIGIN) to allow this origin.
+//
+// In dev, requests go to the relative "/api" path, which vite.config.ts
+// proxies to the local Worker. In production the frontend (Pages) and the
+// Worker are separate deployments on separate domains, so a relative path
+// would hit Pages' own origin and 404 -- VITE_API_BASE_URL (set as a Pages
+// build-time environment variable) points requests at the deployed Worker's
+// URL instead, e.g. https://ai-job-search-worker.<subdomain>.workers.dev/api.
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "/api"
 
 export class ApiError extends Error {
   status: number
@@ -11,7 +19,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
