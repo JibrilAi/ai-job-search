@@ -1,43 +1,91 @@
 # AI Job Search Platform (Cloudflare)
 
 A hosted, multi-user version of this repo's job-search workflow, built on
-Cloudflare Workers, D1, KV, R2, and Queues. This is a new app that lives
-alongside the existing local Claude Code skills (`.claude/`, `.agents/`,
-`cv/`, `cover_letters/`) -- it does not replace them. See
-`/root/.claude/plans/can-you-inspect-the-majestic-sphinx.md` in the session
-that built this (or `docs/architecture.md` below) for the full design.
+Cloudflare Workers, D1, KV, R2, Queues, and Browser Rendering. This is a new
+app that lives alongside the existing local Claude Code skills (`.claude/`,
+`.agents/`, `cv/`, `cover_letters/`) -- it does not replace them. See
+`docs/architecture.md` for the full design.
 
 ## What's here
 
 - `worker/` -- a Cloudflare Worker: REST API (`/api/*`), a Cron-triggered
-  scraper, and two Queue consumers (scraping, AI ranking).
+  scraper, two Queue consumers (scraping, AI ranking), and CV/cover-letter
+  PDF generation via Browser Rendering.
 - `frontend/` -- a React + Vite app (deploys to Cloudflare Pages): auth,
-  profile setup, and a job feed/detail dashboard.
+  profile setup, job feed/detail, document studio, application tracker.
 - `migrations/` -- D1 schema, applied in order (`0001`..`0005`).
 - `docs/` -- architecture notes and the local-data-to-D1 migration mapping.
 
 ## Status
 
-Built and verified end-to-end in local dev (`wrangler dev --local` + Vite,
-against local D1/KV/Queue emulation, plus a real reachability check against
-`api.anthropic.com`):
+All of the following was built and verified end-to-end in local dev
+(`wrangler dev --local` + Vite, against local D1/KV/R2/Queue emulation, a
+**real headless Chrome** via Miniflare's Browser Rendering emulation, and a
+real request against `api.anthropic.com`) -- not just typechecked:
 
 - **Auth** -- signup, login, magic link, sessions (D1-backed, PBKDF2 password
-  hashing via Web Crypto).
+  hashing via Web Crypto). Verified via curl and a real browser session
+  (signup -> profile -> feed).
 - **Profile** -- full CRUD, mirrors CLAUDE.md's Candidate Profile shape.
+  Verified round-tripping through both the API and the React form.
 - **Scraper** -- freehire.me portal ported to a Worker, Cron -> Queue ->
-  dedupe-on-upsert into the shared `jobs` table. (LinkedIn and the Danish
-  portals are not ported yet -- see Known limitations.)
+  dedupe-on-upsert into the shared `jobs` table. The Cron -> Queue -> upsert
+  -> fan-out mechanics were verified locally (retry/backoff, drop-after-max
+  behavior all confirmed); the actual freehire.me HTTP call could not be
+  exercised from this sandbox (its network policy blocks that domain) -- see
+  Known limitations. LinkedIn and the Danish portals are not ported yet.
 - **AI ranking** -- reproduces `04-job-evaluation.md`'s rubric, calls the
-  Claude API directly with forced structured output, fans out per (user, job)
-  via a Queue, writes weighted scores + verdicts + gate results to
-  `user_job_rankings`.
+  Claude API directly with forced structured output (tool-use + prompt
+  caching), fans out per (user, job) via a queue, writes weighted
+  scores/verdicts/gate results to `user_job_rankings`. The request was
+  verified to reach the real Anthropic API correctly (a placeholder key
+  returns a genuine `authentication_error`, proving the request shape,
+  headers, and endpoint are right) and against a fully mocked response in
+  `worker/test/claude-client.test.ts`. Do a real ranking with a valid
+  `ANTHROPIC_API_KEY` before trusting ranking quality.
 - **Dashboard** -- React job feed (ranked, badge-annotated) and job detail
   (score breakdown, strengths/gaps, gate explanations, manual re-rank).
+  Verified visually with seeded ranking data through a real browser session.
+- **CV/cover-letter generation** -- HTML/CSS templates (moderncv-banking
+  and cover.cls look-alikes, embedding the project's actual Lato/Raleway
+  fonts as base64 data URIs) rendered to PDF via the **Browser Rendering
+  API**, stored in R2, and text-layer-verified with `unpdf`. This is the one
+  piece that genuinely needed a live browser to prove out, and it was: a
+  real CV PDF was generated end-to-end (headless Chrome -> PDF -> R2 ->
+  downloaded -> visually inspected -> text layer confirmed selectable, 0
+  ATS warnings). See "How the PDF pipeline was actually verified" below for
+  the two real bugs this caught. Cover-letter drafting (a Claude call)
+  verified the same way ranking was -- reaches the real API, fails cleanly
+  on a placeholder key.
+- **Application tracker** -- CRUD + status transitions following
+  `outcome.md`'s status vocabulary, verified via curl and a real browser
+  session (add an application, change its status, see it persist).
+- **Company research cache / salary lookup** -- basic CRUD verified via
+  curl.
 
-**Not yet built** (see the plan's Phase 5/6): CV/cover-letter generation
-(Browser Rendering + HTML templates), the application tracker, company
-research and salary routes.
+### How the PDF pipeline was actually verified (and two bugs it caught)
+
+Local `wrangler dev` can genuinely launch headless Chrome for Browser
+Rendering -- Miniflare downloads and runs a real browser. Two real,
+non-obvious bugs turned up doing this, both now fixed:
+
+1. **pdfjs-dist's default build refuses to run without a Web Worker**, which
+   the Workers runtime doesn't provide (`No "GlobalWorkerOptions.workerSrc"
+   specified`, then a failed dynamic `import()` when a workerSrc was forced).
+   Fixed by switching the ATS text-layer check from raw `pdfjs-dist` to
+   `unpdf`, which bundles a PDF.js build meant for serverless/edge runtimes
+   with no Worker/DOM dependency.
+2. **The generated PDF's `ArrayBuffer` was empty after ATS verification ran**,
+   because `unpdf`/pdf.js detaches (transfers) the buffer it's given. The
+   route verified the PDF, *then* uploaded the same (now-empty) buffer to R2,
+   producing a 0-byte file. Fixed by passing `pdf.slice(0)` (an independent
+   copy) into `verifyAtsTextLayer`, keeping the original intact for the R2
+   upload. See `worker/src/routes/documents.ts`.
+
+Both were caught only because this was run against a real browser and a real
+generated PDF, not just typechecked -- exactly the risk the original plan
+flagged ("do not assume Browser-Rendering-generated PDFs always have a clean
+text layer... verify this empirically").
 
 ## Local development
 
@@ -54,6 +102,11 @@ npm run db:migrate:local                 # applies migrations/*.sql to local D1
 npm run dev:worker                       # wrangler dev, http://localhost:8787
 npm run dev:frontend                     # vite dev, http://localhost:5173 (proxies /api)
 ```
+
+If `wrangler dev` runs as root (e.g. in a container), Chrome refuses to
+launch for Browser Rendering unless you set `CI=1` in the environment first
+(Miniflare adds `--no-sandbox` when `process.env.CI` is set) -- e.g.
+`CI=1 npm run dev:worker`. Not needed on a normal (non-root) machine.
 
 `worker/.dev.vars` is gitignored -- never commit real secrets. In production,
 secrets are set with `wrangler secret put <NAME>` (see `wrangler.toml`'s
@@ -77,15 +130,23 @@ production D1 database.
   `worker/src/lib/scrapers/<portal>.ts` (same `PortalScraper` interface) and
   registering it in `worker/src/lib/scrapers/registry.ts`. LinkedIn is
   deliberately deferred -- see the plan's risk notes on scraping-at-scale.
+  This sandbox's network policy blocked outbound requests to freehire.me
+  directly, so the scraper's actual HTTP call is unverified here (the
+  Cron/Queue/dedupe mechanics around it are); test it against the real API
+  before relying on it.
 - Magic-link/password-reset email falls back to `console.log` when
   `RESEND_API_KEY` is unset (see `worker/src/lib/auth/email.ts`) -- fine for
   dev, but needs a real Resend account + verified sending domain before
   magic links work for real users.
 - No rate limiting yet on auth endpoints (`AUTH_KV` is wired up for this but
   unused so far).
-- The Claude API call was verified against the real endpoint (auth error
-  with a placeholder key, confirming the request reaches Anthropic and is
-  shaped correctly) and against a fully mocked response in
-  `worker/test/claude-client.test.ts`, but not against a live successful
-  ranking -- do that first with a real `ANTHROPIC_API_KEY` before relying on
-  ranking quality.
+- CV/cover-letter templates render from the stored profile as-is -- there is
+  no LLM-driven bullet-selection/tailoring pass for the CV (the cover letter
+  does get one, via `lib/documents/coverLetterDraft.ts`). A phone number
+  field doesn't exist in the profile schema yet (the original LaTeX CV has
+  one); add it to `profiles` + the Profile Setup form if needed.
+- Custom CV/cover-letter template uploads (the `cv_templates`/
+  `cover_letter_templates` tables exist for this) aren't built -- MVP
+  rendering is code-driven, not template-driven.
+- Gmail sync, Notion sync, Vectorize semantic search are out of scope (see
+  `docs/architecture.md`).

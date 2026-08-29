@@ -60,8 +60,8 @@ See `migrations/0001`..`0005` for the authoritative schema. Summary:
 | `jobs` | scrape consumer | shared job pool, deduped on `dedupe_key` |
 | `scrape_queries` | scheduled handler | what the Cron handler tells the scrape queue to do |
 | `user_job_rankings` | rank consumer | per-(user, job) AI score, verdict, gate results |
-| `applications`, `company_research_cache`, `salary_data` | not yet built (Phase 6) | tracker + shared reference caches |
-| `cv_templates`, `cover_letter_templates`, `generated_documents` | not yet built (Phase 5) | HTML/CSS templates + R2 pointers to rendered PDFs |
+| `applications`, `company_research_cache`, `salary_data` | applications/companyResearch/salary routes | tracker + shared reference caches |
+| `cv_templates`, `cover_letter_templates`, `generated_documents` | documents routes | seeded default templates; MVP rendering is code-driven (`lib/documents/{cvTemplate,coverLetterTemplate}.ts`), not read from these tables' html_source/css_source |
 
 ## Frontend
 
@@ -71,11 +71,30 @@ through `frontend/src/api/client.ts`, a thin typed fetch wrapper -- there is
 no client-side state library; each route fetches what it needs with
 `useEffect`.
 
+## Document generation (Phase 5)
+
+`worker/src/routes/documents.ts`:
+- `POST /api/documents/cv` -- renders `lib/documents/cvTemplate.ts` (profile
+  data only) to HTML, calls `lib/documents/browserRender.ts` (Browser
+  Rendering API via `@cloudflare/puppeteer`) for a PDF, verifies the text
+  layer with `lib/documents/verifyPdf.ts` (`unpdf`), uploads to R2, records a
+  `generated_documents` row.
+- `POST /api/documents/cover-letter` -- additionally calls
+  `lib/documents/coverLetterDraft.ts` (a Claude API call, same forced
+  tool-use pattern as ranking) to draft the letter's prose before rendering.
+- Both routes verify against **a copy** of the PDF buffer
+  (`pdf.slice(0)`) before uploading the original to R2 -- `unpdf`/pdf.js
+  detaches the buffer it's given, so verifying first and uploading the same
+  reference afterward silently produces a 0-byte R2 object. Found by testing
+  against a real generated PDF; see platform/README.md.
+
+Fonts (`lib/documents/fonts.ts`) are base64-encoded from the project's actual
+`cover_letters/OpenFonts/fonts/{lato,raleway}/` files and embedded as
+`@font-face` data URIs, so Browser Rendering never needs an external font
+fetch.
+
 ## What's deliberately not built yet
 
-- CV/cover-letter generation (Browser Rendering + HTML templates replacing
-  LaTeX) -- Phase 5 in the plan.
-- Application tracker, company research, salary routes -- Phase 6.
 - LinkedIn and the four Danish portals' scrapers -- ported the same way as
   `lib/scrapers/freehire.ts`, registered in `lib/scrapers/registry.ts`, but
   deferred (LinkedIn especially, given anti-scraping risk at platform scale).

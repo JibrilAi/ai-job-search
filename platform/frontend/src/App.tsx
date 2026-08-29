@@ -6,6 +6,8 @@ import AuthVerify from "./routes/AuthVerify.js"
 import ProfileSetup from "./routes/ProfileSetup.js"
 import JobFeed from "./routes/JobFeed.js"
 import JobDetail from "./routes/JobDetail.js"
+import DocumentStudio from "./routes/DocumentStudio.js"
+import ApplicationTracker from "./routes/ApplicationTracker.js"
 import Settings from "./routes/Settings.js"
 
 function TopNav() {
@@ -18,6 +20,8 @@ function TopNav() {
         <NavLink to="/" end>
           Jobs
         </NavLink>
+        <NavLink to="/applications">Applications</NavLink>
+        <NavLink to="/documents">Documents</NavLink>
         <NavLink to="/profile">Profile</NavLink>
         <NavLink to="/settings">Settings</NavLink>
       </div>
@@ -43,6 +47,22 @@ function AppRoutes() {
         element={
           <RequireAuth>
             <JobDetail />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/applications"
+        element={
+          <RequireAuth>
+            <ApplicationTracker />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/documents"
+        element={
+          <RequireAuth>
+            <DocumentStudio />
           </RequireAuth>
         }
       />

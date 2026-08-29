@@ -33,3 +33,17 @@ CREATE INDEX idx_generated_documents_user ON generated_documents(user_id);
 
 -- Foreign keys from applications -> generated_documents are enforced at the
 -- application layer (D1/SQLite doesn't support adding FKs via ALTER TABLE).
+
+-- Seed the system default templates. MVP rendering is code-driven
+-- (worker/src/lib/documents/{cvTemplate,coverLetterTemplate}.ts), not
+-- read from html_source/css_source here -- these rows exist so
+-- generated_documents.template_id has something to point at, and so a
+-- future custom-template-upload feature has a row shape to extend rather
+-- than a table to design from scratch.
+INSERT INTO cv_templates (id, name, owner_user_id, html_source, css_source, created_at)
+VALUES ('default-cv-template', 'Default (banking-style)', NULL,
+        'rendered by worker/src/lib/documents/cvTemplate.ts', '', datetime('now'));
+
+INSERT INTO cover_letter_templates (id, name, owner_user_id, html_source, css_source, created_at)
+VALUES ('default-cover-letter-template', 'Default', NULL,
+        'rendered by worker/src/lib/documents/coverLetterTemplate.ts', '', datetime('now'));

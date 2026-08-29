@@ -5,6 +5,10 @@ import authRoutes from "./routes/auth.js"
 import profileRoutes from "./routes/profile.js"
 import jobsRoutes from "./routes/jobs.js"
 import rankingsRoutes from "./routes/rankings.js"
+import documentsRoutes from "./routes/documents.js"
+import applicationsRoutes from "./routes/applications.js"
+import companyResearchRoutes from "./routes/companyResearch.js"
+import salaryRoutes from "./routes/salary.js"
 import { handleScheduled } from "./scheduled.js"
 import { handleScrapeMessage } from "./queue-consumers/scrapeConsumer.js"
 import { handleRankMessage } from "./queue-consumers/rankConsumer.js"
@@ -21,6 +25,10 @@ app.route("/api/auth", authRoutes)
 app.route("/api/profile", profileRoutes)
 app.route("/api/jobs", jobsRoutes)
 app.route("/api/rankings", rankingsRoutes)
+app.route("/api/documents", documentsRoutes)
+app.route("/api/applications", applicationsRoutes)
+app.route("/api/company-research", companyResearchRoutes)
+app.route("/api/salary", salaryRoutes)
 
 export default {
   fetch: app.fetch,
