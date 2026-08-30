@@ -2,3 +2,7 @@ ANTHROPIC_API_KEY=sk-ant-...
 SESSION_SECRET=change-me
 MAGIC_LINK_SECRET=change-me
 RESEND_API_KEY=re_...
+# Cloudflare Turnstile secret key (dashboard.cloudflare.com -> Turnstile).
+# Pair with VITE_TURNSTILE_SITE_KEY in frontend/.env. If unset, Turnstile
+# verification is skipped -- fine for local dev, but set it before deploying.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

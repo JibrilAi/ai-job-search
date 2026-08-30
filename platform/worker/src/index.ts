@@ -9,6 +9,7 @@ import documentsRoutes from "./routes/documents.js"
 import applicationsRoutes from "./routes/applications.js"
 import companyResearchRoutes from "./routes/companyResearch.js"
 import salaryRoutes from "./routes/salary.js"
+import adminRoutes from "./routes/admin.js"
 import { handleScheduled } from "./scheduled.js"
 import { handleScrapeMessage } from "./queue-consumers/scrapeConsumer.js"
 import { handleRankMessage } from "./queue-consumers/rankConsumer.js"
@@ -29,6 +30,7 @@ app.route("/api/documents", documentsRoutes)
 app.route("/api/applications", applicationsRoutes)
 app.route("/api/company-research", companyResearchRoutes)
 app.route("/api/salary", salaryRoutes)
+app.route("/api/admin", adminRoutes)
 
 export default {
   fetch: app.fetch,

@@ -1,7 +1,8 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { authApi, ApiError } from "../api/client.js"
 import { useAuth } from "../api/AuthContext.js"
+import Turnstile, { type TurnstileHandle } from "../components/Turnstile.js"
 
 type Mode = "login" | "signup" | "magic-link"
 
@@ -12,6 +13,8 @@ export default function SignupLogin() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | undefined>(undefined)
+  const turnstileRef = useRef<TurnstileHandle>(null)
   const { refresh } = useAuth()
   const navigate = useNavigate()
 
@@ -22,19 +25,21 @@ export default function SignupLogin() {
     setSubmitting(true)
     try {
       if (mode === "signup") {
-        await authApi.signup(email, password)
+        await authApi.signup(email, password, turnstileToken)
         await refresh()
         navigate("/profile")
       } else if (mode === "login") {
-        await authApi.login(email, password)
+        await authApi.login(email, password, turnstileToken)
         await refresh()
-        navigate("/")
+        navigate("/dashboard")
       } else {
-        await authApi.magicLink(email)
+        await authApi.magicLink(email, turnstileToken)
         setInfo("If that email is registered, a sign-in link is on its way. Check your inbox.")
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
+      turnstileRef.current?.reset()
+      setTurnstileToken(undefined)
     } finally {
       setSubmitting(false)
     }
@@ -74,6 +79,7 @@ export default function SignupLogin() {
               />
             </div>
           )}
+          <Turnstile ref={turnstileRef} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(undefined)} />
           {error && <p className="error-text">{error}</p>}
           {info && <p className="muted">{info}</p>}
           <button type="submit" disabled={submitting}>
