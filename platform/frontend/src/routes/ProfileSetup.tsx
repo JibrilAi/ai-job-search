@@ -33,12 +33,59 @@ function fromCsv(value: string): string[] {
     .filter(Boolean)
 }
 
+// Fills gaps in the current form from an AI-extracted resume without
+// clobbering fields the user already typed in -- a field only wins if the
+// current value is empty and the extracted one isn't.
+function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInput {
+  const str = (a: string | null, b: string | null) => a || b
+  const arr = <T,>(a: T[], b: T[]) => (a.length ? a : b)
+  return {
+    name: str(current.name, incoming.name),
+    city: str(current.city, incoming.city),
+    country: str(current.country, incoming.country),
+    commuteConstraints: str(current.commuteConstraints, incoming.commuteConstraints),
+    cvLanguage: str(current.cvLanguage, incoming.cvLanguage),
+    employmentStatus: str(current.employmentStatus, incoming.employmentStatus),
+    linkedinHeadline: str(current.linkedinHeadline, incoming.linkedinHeadline),
+    languages: arr(current.languages, incoming.languages),
+    education: arr(current.education, incoming.education),
+    experience: arr(current.experience, incoming.experience),
+    skills: {
+      primary: arr(current.skills.primary, incoming.skills.primary),
+      secondary: arr(current.skills.secondary, incoming.skills.secondary),
+      domain: arr(current.skills.domain, incoming.skills.domain),
+      software: arr(current.skills.software, incoming.skills.software),
+    },
+    certifications: arr(current.certifications, incoming.certifications),
+    publications: arr(current.publications, incoming.publications),
+    awards: arr(current.awards, incoming.awards),
+    behavioral: {
+      traits: arr(current.behavioral.traits, incoming.behavioral.traits),
+      strengths: current.behavioral.strengths || incoming.behavioral.strengths,
+      growthAreas: current.behavioral.growthAreas || incoming.behavioral.growthAreas,
+      idealEnvironment: current.behavioral.idealEnvironment || incoming.behavioral.idealEnvironment,
+    },
+    motivation: {
+      energizingTasks: arr(current.motivation.energizingTasks, incoming.motivation.energizingTasks),
+      drainingTasks: arr(current.motivation.drainingTasks, incoming.motivation.drainingTasks),
+    },
+    targetSectors: arr(current.targetSectors, incoming.targetSectors),
+    dealbreakers: arr(current.dealbreakers, incoming.dealbreakers),
+    eligibility: {
+      citizenshipOrPr: str(current.eligibility.citizenshipOrPr, incoming.eligibility.citizenshipOrPr),
+      visaConstraintsNote: str(current.eligibility.visaConstraintsNote, incoming.eligibility.visaConstraintsNote),
+    },
+  }
+}
+
 export default function ProfileSetup() {
   const [profile, setProfile] = useState<ProfileInput>(EMPTY_PROFILE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
 
   useEffect(() => {
     profileApi
@@ -85,12 +132,39 @@ export default function ProfileSetup() {
     }))
   }
 
+  async function handleResumeImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setImporting(true)
+    setImportError(null)
+    try {
+      const { profile: extracted } = await profileApi.importResume(file)
+      setProfile((current) => mergeProfile(current, extracted))
+    } catch (err) {
+      setImportError(err instanceof ApiError ? err.message : "Could not import that resume.")
+    } finally {
+      setImporting(false)
+    }
+  }
+
   if (loading) return <div className="app-shell">Loading…</div>
 
   return (
     <div className="app-shell">
       <h1>Your profile</h1>
       <p className="muted">This drives AI job matching -- the more complete it is, the better the ranking.</p>
+
+      <div className="card">
+        <h3>Import from resume</h3>
+        <p className="muted">
+          Upload a PDF resume to prefill the form below with AI-extracted details. It only fills in blank fields --
+          anything you've already typed is kept. Review everything before saving.
+        </p>
+        <input type="file" accept="application/pdf" disabled={importing} onChange={handleResumeImport} />
+        {importing && <p className="muted">Reading your resume…</p>}
+        {importError && <p className="error-text">{importError}</p>}
+      </div>
 
       <form onSubmit={handleSubmit}>
         <div className="card">
@@ -204,6 +278,13 @@ export default function ProfileSetup() {
               onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, domain: fromCsv(e.target.value) } })}
             />
           </div>
+          <div className="form-row">
+            <label>Software / tools (comma-separated)</label>
+            <input
+              value={csv(profile.skills.software)}
+              onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, software: fromCsv(e.target.value) } })}
+            />
+          </div>
         </div>
 
         <div className="card">
@@ -297,6 +378,31 @@ export default function ProfileSetup() {
         </div>
 
         <div className="card">
+          <h3>Credentials</h3>
+          <div className="form-row">
+            <label>Certifications (comma-separated)</label>
+            <input
+              value={csv(profile.certifications)}
+              onChange={(e) => setProfile({ ...profile, certifications: fromCsv(e.target.value) })}
+            />
+          </div>
+          <div className="form-row">
+            <label>Publications (comma-separated)</label>
+            <input
+              value={csv(profile.publications)}
+              onChange={(e) => setProfile({ ...profile, publications: fromCsv(e.target.value) })}
+            />
+          </div>
+          <div className="form-row">
+            <label>Awards (comma-separated)</label>
+            <input
+              value={csv(profile.awards)}
+              onChange={(e) => setProfile({ ...profile, awards: fromCsv(e.target.value) })}
+            />
+          </div>
+        </div>
+
+        <div className="card">
           <h3>Behavioral profile</h3>
           <div className="form-row">
             <label>Traits (comma-separated)</label>
@@ -310,6 +416,13 @@ export default function ProfileSetup() {
             <textarea
               value={profile.behavioral.strengths}
               onChange={(e) => setProfile({ ...profile, behavioral: { ...profile.behavioral, strengths: e.target.value } })}
+            />
+          </div>
+          <div className="form-row">
+            <label>Growth areas</label>
+            <textarea
+              value={profile.behavioral.growthAreas}
+              onChange={(e) => setProfile({ ...profile, behavioral: { ...profile.behavioral, growthAreas: e.target.value } })}
             />
           </div>
           <div className="form-row">

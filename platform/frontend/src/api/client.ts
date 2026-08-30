@@ -31,6 +31,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
+// No Content-Type header here -- the browser must set its own multipart
+// boundary for FormData, which request()'s hardcoded application/json would
+// clobber.
+async function requestFormData<T>(path: string, form: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, { method: "POST", credentials: "include", body: form })
+  const body = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new ApiError(response.status, (body && body.error) || `request failed: ${response.status}`)
+  }
+  return body as T
+}
+
 export interface CurrentUser {
   id: string
   email: string
@@ -78,6 +90,11 @@ export type ProfileInput = Omit<Profile, "userId" | "profileVersion" | "updatedA
 export const profileApi = {
   get: () => request<{ profile: Profile | null }>("/profile"),
   save: (input: ProfileInput) => request<{ profile: Profile }>("/profile", { method: "PUT", body: JSON.stringify(input) }),
+  importResume: (file: File) => {
+    const form = new FormData()
+    form.set("resume", file)
+    return requestFormData<{ profile: ProfileInput }>("/profile/resume", form)
+  },
 }
 
 export interface JobSummary {
