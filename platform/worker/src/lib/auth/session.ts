@@ -53,14 +53,34 @@ export async function deleteAllSessionsForUser(env: Env, userId: string): Promis
   await env.DB.prepare(`DELETE FROM sessions WHERE user_id = ?`).bind(userId).run()
 }
 
+// SameSite=None is required here, not Lax: the frontend (Pages) and this API
+// (Workers) are deployed on genuinely different origins in production, and
+// every auth call from the frontend is a cross-site fetch() -- Lax only
+// covers top-level cross-site navigations, so it silently drops the cookie
+// on the very next fetch (e.g. GET /api/auth/session), leaving the user
+// looking logged-out immediately after a successful signup/login. None
+// requires Secure, which is only safe to set once `secure` is true (in dev,
+// over plain HTTP, the browser rejects None without Secure entirely, so Lax
+// is kept there -- local dev is same-origin via Vite's proxy anyway, where
+// Lax works fine).
+function sameSite(secure: boolean): string {
+  return secure ? "None" : "Lax"
+}
+
 export function sessionCookie(sessionId: string, secure: boolean): string {
-  const attrs = [`${SESSION_COOKIE}=${sessionId}`, "HttpOnly", "SameSite=Lax", "Path=/", `Max-Age=${SESSION_TTL_SECONDS}`]
+  const attrs = [
+    `${SESSION_COOKIE}=${sessionId}`,
+    "HttpOnly",
+    `SameSite=${sameSite(secure)}`,
+    "Path=/",
+    `Max-Age=${SESSION_TTL_SECONDS}`,
+  ]
   if (secure) attrs.push("Secure")
   return attrs.join("; ")
 }
 
 export function clearSessionCookie(secure: boolean): string {
-  const attrs = [`${SESSION_COOKIE}=`, "HttpOnly", "SameSite=Lax", "Path=/", "Max-Age=0"]
+  const attrs = [`${SESSION_COOKIE}=`, "HttpOnly", `SameSite=${sameSite(secure)}`, "Path=/", "Max-Age=0"]
   if (secure) attrs.push("Secure")
   return attrs.join("; ")
 }
