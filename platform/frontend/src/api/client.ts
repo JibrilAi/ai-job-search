@@ -146,7 +146,8 @@ export const jobsApi = {
 }
 
 export const rankingsApi = {
-  feed: () => request<{ rankings: RankedJobFeedRow[] }>("/rankings"),
+  feed: (includeVetoed?: boolean) =>
+    request<{ rankings: RankedJobFeedRow[] }>(`/rankings${includeVetoed ? "?includeVetoed=true" : ""}`),
   reRank: (jobId: string) => request<{ ok: boolean; queued: boolean }>(`/rankings/${jobId}/re-rank`, { method: "POST" }),
 }
 

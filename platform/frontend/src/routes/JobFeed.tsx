@@ -21,18 +21,24 @@ function gateClass(v: string | null): string {
 export default function JobFeed() {
   const [rows, setRows] = useState<RankedJobFeedRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [includeVetoed, setIncludeVetoed] = useState(false)
 
   useEffect(() => {
+    setRows(null)
     rankingsApi
-      .feed()
+      .feed(includeVetoed)
       .then(({ rankings }) => setRows(rankings))
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load your job feed."))
-  }, [])
+  }, [includeVetoed])
 
   return (
     <div className="app-shell">
       <h1>Job feed</h1>
       <p className="muted">Ranked against your profile. Jobs are scraped once and shared; scores are yours alone.</p>
+      <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+        <input type="checkbox" checked={includeVetoed} onChange={(e) => setIncludeVetoed(e.target.checked)} />
+        Show jobs outside your location, language, or eligibility (hidden by default)
+      </label>
 
       {error && <p className="error-text">{error}</p>}
       {!rows && !error && <p className="muted">Loading…</p>}

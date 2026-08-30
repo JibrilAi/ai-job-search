@@ -11,7 +11,8 @@ rankings.use("*", requireAuth)
 rankings.get("/", async (c) => {
   const limit = Number(c.req.query("limit") ?? "50")
   const offset = Number(c.req.query("offset") ?? "0")
-  const feed = await listRankedJobFeedForUser(c.env, c.get("userId"), { limit, offset })
+  const includeVetoed = c.req.query("includeVetoed") === "true"
+  const feed = await listRankedJobFeedForUser(c.env, c.get("userId"), { limit, offset, includeVetoed })
   return c.json({ rankings: feed })
 })
 

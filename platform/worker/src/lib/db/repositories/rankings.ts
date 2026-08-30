@@ -132,19 +132,31 @@ export interface RankedJobFeedRow {
   languageGate: string | null
 }
 
-/** The Job Feed's primary query: this user's ranked jobs, joined to job summaries, best-first. */
+/**
+ * The Job Feed's primary query: this user's ranked jobs, joined to job
+ * summaries, best-first. By default excludes jobs vetoed on a hard gate
+ * (location/language/eligibility FAIL -- the same veto definition
+ * lib/ranking/schema.ts's isVetoed() uses for the "(vetoed)" verdict label),
+ * since a role outside commute range or requiring an undeclared language is
+ * never actually actionable -- mirroring how a normal job board only shows
+ * postings matching your chosen location. includeVetoed opts back into the
+ * full shared pool.
+ */
 export async function listRankedJobFeedForUser(
   env: Env,
   userId: string,
-  opts: { limit?: number; offset?: number } = {},
+  opts: { limit?: number; offset?: number; includeVetoed?: boolean } = {},
 ): Promise<RankedJobFeedRow[]> {
+  const vetoFilter = opts.includeVetoed
+    ? ""
+    : `AND r.location_verdict IS NOT 'FAIL' AND r.language_gate IS NOT 'FAIL' AND r.eligibility_verdict IS NOT 'FAIL'`
   const { results } = await env.DB.prepare(
     `SELECT j.id as jobId, j.title, j.company, j.location, j.source_url as sourceUrl, j.deadline,
             r.rank_score as rankScore, r.rank_verdict as rankVerdict,
             r.location_verdict as locationVerdict, r.language_gate as languageGate
      FROM user_job_rankings r
      JOIN jobs j ON j.id = r.job_id
-     WHERE r.user_id = ? AND r.status = 'ranked' AND j.status = 'active'
+     WHERE r.user_id = ? AND r.status = 'ranked' AND j.status = 'active' ${vetoFilter}
      ORDER BY r.rank_score DESC
      LIMIT ? OFFSET ?`,
   )
