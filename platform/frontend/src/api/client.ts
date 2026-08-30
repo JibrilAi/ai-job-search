@@ -181,7 +181,7 @@ export const documentsApi = {
       method: "POST",
       body: JSON.stringify({ jobId, applicationId }),
     }),
-  downloadUrl: (id: string) => `/api/documents/${id}/download`,
+  downloadUrl: (id: string) => `${API_BASE}/documents/${id}/download`,
 }
 
 export type ApplicationStatus =
