@@ -52,6 +52,21 @@ describe("renderCvHtml", () => {
     expect(html).not.toContain("Publications")
     expect(html).not.toContain("Honors and Awards")
   })
+
+  it("renders the tailoring's profile statement and highlighted skills when given", () => {
+    const html = renderCvHtml(profile, "jane@example.com", {
+      profileStatement: "A data engineer with pipeline experience well suited to this role.",
+      emphasizedSkills: ["Python", "SQL"],
+    })
+    expect(html).toContain("A data engineer with pipeline experience well suited to this role.")
+    expect(html).toContain("Highlighted for this role:")
+    expect(html).toContain("Python, SQL")
+  })
+
+  it("renders normally when no tailoring is given", () => {
+    const html = renderCvHtml(profile, "jane@example.com", null)
+    expect(html).not.toContain("Highlighted for this role")
+  })
 })
 
 describe("renderCoverLetterHtml", () => {

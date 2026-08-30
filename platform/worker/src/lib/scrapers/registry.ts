@@ -1,13 +1,16 @@
 import type { PortalScraper } from "./types.js"
 import { createFreehireScraper } from "./freehire.js"
+import { createLinkedinScraper } from "./linkedin.js"
 
-// Only freehire is wired up for MVP (Phase 2) -- the lowest-risk portal.
-// Danish portals (jobbank/jobdanmark/jobindex/jobnet) and LinkedIn are ported
-// the same way (see the plan's Scraper migration approach) but deferred; add
-// their entries here once ported, keyed by the `portal` value scrape_queries
-// rows use.
+// freehire and linkedin are wired up. The original repo's four Danish portals
+// (jobbank/jobdanmark/jobindex/jobnet -- jobbank.dk, not Canada's Job Bank)
+// are deliberately not ported here: they're Danish-market sources and this
+// deployment's default scrape_queries seed targets Canada, so they'd add
+// scraping surface without returning relevant results for this deployment.
+// Port them the same way if a future user needs the Danish market.
 const scrapers: Record<string, () => PortalScraper> = {
   freehire: () => createFreehireScraper(),
+  linkedin: () => createLinkedinScraper(),
 }
 
 export function getScraper(portal: string): PortalScraper | null {
