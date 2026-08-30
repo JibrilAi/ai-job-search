@@ -17,7 +17,12 @@ function entryDateRange(start?: string, end?: string): string {
   return `${start ?? ""}${start || end ? "–" : ""}${end ?? "Present"}`
 }
 
-export function renderCvHtml(profile: Profile, email: string): string {
+export interface CvTailoringInput {
+  profileStatement: string
+  emphasizedSkills: string[]
+}
+
+export function renderCvHtml(profile: Profile, email: string, tailoring?: CvTailoringInput | null): string {
   const experienceHtml = profile.experience
     .map(
       (e) => `
@@ -45,6 +50,9 @@ export function renderCvHtml(profile: Profile, email: string): string {
     .join("")
 
   const skillsHtml = [
+    tailoring?.emphasizedSkills.length
+      ? `<li><strong>Highlighted for this role:</strong> ${esc(tailoring.emphasizedSkills.join(", "))}</li>`
+      : "",
     profile.skills.primary.length ? `<li><strong>Primary:</strong> ${esc(profile.skills.primary.join(", "))}</li>` : "",
     profile.skills.secondary.length ? `<li><strong>Secondary:</strong> ${esc(profile.skills.secondary.join(", "))}</li>` : "",
     profile.skills.domain.length ? `<li><strong>Domain:</strong> ${esc(profile.skills.domain.join(", "))}</li>` : "",
@@ -89,6 +97,7 @@ export function renderCvHtml(profile: Profile, email: string): string {
 <body>
   <h1 class="name">${esc(profile.name) || "Candidate"}</h1>
   <div class="contact">${contactLine}${profile.commuteConstraints ? ` · ${esc(profile.commuteConstraints)}` : ""}</div>
+  ${tailoring?.profileStatement ? `<p class="profile-statement">${esc(tailoring.profileStatement)}</p>` : ""}
 
   <section>
     <h2>Core Competencies</h2>

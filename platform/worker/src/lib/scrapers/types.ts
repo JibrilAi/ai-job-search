@@ -17,6 +17,8 @@ export interface PortalSearchOpts {
   query?: string
   jobage?: number
   limit?: number
+  /** Free-text location filter -- ignored by portals that don't support geo-scoping (e.g. freehire). */
+  location?: string
 }
 
 export interface PortalScraper {

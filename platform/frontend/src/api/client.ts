@@ -171,10 +171,10 @@ export interface GeneratedDocument {
 
 export const documentsApi = {
   list: () => request<{ documents: GeneratedDocument[] }>("/documents"),
-  generateCv: (applicationId?: string) =>
+  generateCv: (jobId?: string, applicationId?: string) =>
     request<{ document: GeneratedDocument; atsReport: AtsReport }>("/documents/cv", {
       method: "POST",
-      body: JSON.stringify({ applicationId }),
+      body: JSON.stringify({ jobId, applicationId }),
     }),
   generateCoverLetter: (jobId: string, applicationId?: string) =>
     request<{ document: GeneratedDocument; atsReport: AtsReport }>("/documents/cover-letter", {

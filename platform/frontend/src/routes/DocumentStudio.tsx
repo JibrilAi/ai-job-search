@@ -3,6 +3,7 @@ import { documentsApi, ApiError, type GeneratedDocument, type AtsReport } from "
 
 export default function DocumentStudio() {
   const [documents, setDocuments] = useState<GeneratedDocument[] | null>(null)
+  const [cvJobId, setCvJobId] = useState("")
   const [jobId, setJobId] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<"cv" | "cover" | null>(null)
@@ -21,7 +22,7 @@ export default function DocumentStudio() {
     setBusy("cv")
     setError(null)
     try {
-      const { atsReport } = await documentsApi.generateCv()
+      const { atsReport } = await documentsApi.generateCv(cvJobId.trim() || undefined)
       setLastReport(atsReport)
       load()
     } catch (err) {
@@ -56,7 +57,11 @@ export default function DocumentStudio() {
 
       <div className="card">
         <h3>Generate CV</h3>
-        <p className="muted">Uses your saved profile directly -- no job needed.</p>
+        <p className="muted">Uses your saved profile directly. Add a job ID to tailor the opening summary and highlighted skills to that posting.</p>
+        <div className="form-row">
+          <label>Job ID (optional)</label>
+          <input value={cvJobId} onChange={(e) => setCvJobId(e.target.value)} placeholder="e.g. from /jobs/&lt;id&gt; -- leave blank for a generic CV" />
+        </div>
         <button onClick={generateCv} disabled={busy !== null}>
           {busy === "cv" ? "Generating…" : "Generate CV"}
         </button>

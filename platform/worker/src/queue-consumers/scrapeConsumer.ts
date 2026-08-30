@@ -17,7 +17,7 @@ export async function handleScrapeMessage(env: Env, message: ScrapeQueueMessage)
     throw new Error(`no scraper registered for portal "${message.portal}"`)
   }
 
-  const query = JSON.parse(message.queryJson) as { query?: string; jobage?: number; limit?: number }
+  const query = JSON.parse(message.queryJson) as { query?: string; jobage?: number; limit?: number; location?: string }
   const results = await scraper.search(query)
 
   const newJobIds: string[] = []

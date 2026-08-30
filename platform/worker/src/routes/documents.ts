@@ -8,6 +8,7 @@ import { insertGeneratedDocument, listGeneratedDocumentsForUser, getGeneratedDoc
 import { renderCvHtml } from "../lib/documents/cvTemplate.js"
 import { renderCoverLetterHtml } from "../lib/documents/coverLetterTemplate.js"
 import { draftCoverLetter } from "../lib/documents/coverLetterDraft.js"
+import { draftCvTailoring } from "../lib/documents/cvTailoring.js"
 import { renderHtmlToPdf } from "../lib/documents/browserRender.js"
 import { verifyAtsTextLayer } from "../lib/documents/verifyPdf.js"
 
@@ -25,9 +26,22 @@ documents.post("/cv", async (c) => {
   if (!profile) return c.json({ error: "save your profile before generating a CV" }, 400)
   if (!user) return c.json({ error: "user not found" }, 404)
 
-  const body = await c.req.json<{ applicationId?: string }>().catch(() => ({}) as { applicationId?: string })
+  const body = await c.req.json<{ applicationId?: string; jobId?: string }>().catch(() => ({}) as { applicationId?: string; jobId?: string })
 
-  const html = renderCvHtml(profile, user.email)
+  let tailoring = null
+  if (body.jobId) {
+    const job = await getJob(c.env, body.jobId)
+    if (!job) return c.json({ error: "job not found" }, 404)
+    try {
+      tailoring = await draftCvTailoring(c.env, { job, profile })
+    } catch (err) {
+      // Tailoring is a nice-to-have on top of a generic CV -- a Claude API
+      // hiccup shouldn't block generating the (still-correct) untailored one.
+      console.error("CV tailoring failed, falling back to a generic CV:", err)
+    }
+  }
+
+  const html = renderCvHtml(profile, user.email, tailoring)
   const pdf = await renderHtmlToPdf(c.env, html)
   // Verify against a copy: unpdf/pdf.js detaches the ArrayBuffer it's given
   // (transferable-object semantics), which would otherwise zero out `pdf`
