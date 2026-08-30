@@ -3,8 +3,14 @@
 // Web Crypto with zero dependencies and is the pragmatic default. Revisit only
 // if a security review calls for scrypt/argon2 via a vetted Workers-compatible
 // WASM library.
-
-const ITERATIONS = 210_000
+//
+// 100,000 is the maximum iteration count the real Workers runtime (workerd)
+// allows -- a request above that throws `NotSupportedError` at deriveBits()
+// time. Local dev (Miniflare's Web Crypto emulation) does not enforce this
+// cap, which is why 210,000 worked in local testing and then broke every
+// signup/login once deployed to production. Found via a live Worker's
+// Observability logs after every signup returned a 500.
+const ITERATIONS = 100_000
 const KEY_LENGTH_BITS = 256
 
 function toHex(buffer: ArrayBuffer): string {
