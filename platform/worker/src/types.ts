@@ -13,6 +13,7 @@ export interface Env {
   SESSION_SECRET: string
   MAGIC_LINK_SECRET: string
   RESEND_API_KEY?: string
+  RESEND_FROM_EMAIL?: string
 }
 
 export interface ScrapeQueueMessage {

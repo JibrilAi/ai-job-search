@@ -65,3 +65,9 @@ FRONTEND_ORIGIN = "https://ai-job-search-2hg.pages.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
 #   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY
+#
+# RESEND_FROM_EMAIL (optional [vars] entry, not a secret): the "Name <local@
+# yourdomain>" sender address for magic-link emails. Must be on a domain
+# verified in the Resend account that owns RESEND_API_KEY -- Resend rejects
+# sends from unverified domains. Without it, sends fall back to Resend's
+# shared sandbox sender, which only delivers to the account's own address.
