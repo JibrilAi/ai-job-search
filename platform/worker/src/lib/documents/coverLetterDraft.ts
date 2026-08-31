@@ -1,10 +1,7 @@
 import type { Env } from "../../types.js"
 import type { JobRow } from "../db/repositories/jobs.js"
 import type { Profile } from "../db/repositories/profiles.js"
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-const ANTHROPIC_VERSION = "2023-06-01"
-const DEFAULT_MODEL = "claude-sonnet-5"
+import { callGemini } from "../geminiClient.js"
 
 export interface CoverLetterContent {
   greeting: string
@@ -16,22 +13,18 @@ export interface CoverLetterContent {
   closingLine: string
 }
 
-const SUBMIT_COVER_LETTER_TOOL = {
-  name: "submit_cover_letter",
-  description: "Submit the structured cover-letter draft.",
-  input_schema: {
-    type: "object",
-    properties: {
-      greeting: { type: "string" },
-      opening: { type: "string" },
-      body: { type: "string" },
-      achievements: { type: "array", items: { type: "string" } },
-      connection: { type: "string" },
-      personalFit: { type: "string" },
-      closingLine: { type: "string" },
-    },
-    required: ["greeting", "opening", "body", "achievements", "connection", "personalFit", "closingLine"],
+const COVER_LETTER_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    greeting: { type: "STRING" },
+    opening: { type: "STRING" },
+    body: { type: "STRING" },
+    achievements: { type: "ARRAY", items: { type: "STRING" } },
+    connection: { type: "STRING" },
+    personalFit: { type: "STRING" },
+    closingLine: { type: "STRING" },
   },
+  required: ["greeting", "opening", "body", "achievements", "connection", "personalFit", "closingLine"],
 }
 
 const SYSTEM_PROMPT = `You draft cover letters for a job search platform. Follow the structure of cover_letters/cover_example.tex exactly:
@@ -42,7 +35,7 @@ const SYSTEM_PROMPT = `You draft cover letters for a job search platform. Follow
 - connection: 1-2 sentences on why this company specifically, referencing only facts given in the job posting text (never invent company facts).
 - personalFit: 2-3 sentences on behavioral strengths and team fit, drawn from the candidate's behavioral profile.
 - closingLine: a single closing sentence (e.g. "I look forward to hearing from you.").
-Write in a warm, direct, cliche-free voice. No em-dashes. Call the submit_cover_letter tool with your draft.`
+Write in a warm, direct, cliche-free voice. No em-dashes. Respond as JSON matching the required schema.`
 
 function buildUserMessage(job: Pick<JobRow, "title" | "company" | "description">, profile: Profile): string {
   return `## Job Posting
@@ -64,30 +57,10 @@ export async function draftCoverLetter(
   env: Env,
   input: { job: Pick<JobRow, "title" | "company" | "description">; profile: Profile },
 ): Promise<CoverLetterContent> {
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      max_tokens: 1024,
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: buildUserMessage(input.job, input.profile) }],
-      tools: [SUBMIT_COVER_LETTER_TOOL],
-      tool_choice: { type: "tool", name: "submit_cover_letter" },
-    }),
-  })
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "")
-    throw new Error(`Anthropic API request failed: ${response.status} ${body}`)
-  }
-
-  const data = (await response.json()) as { content: Array<{ type: string; name?: string; input?: unknown }> }
-  const toolUse = data.content.find((block) => block.type === "tool_use" && block.name === "submit_cover_letter")
-  if (!toolUse) throw new Error("Claude did not return a submit_cover_letter tool call")
-  return toolUse.input as CoverLetterContent
+  return (await callGemini(env, {
+    systemPrompt: SYSTEM_PROMPT,
+    userMessage: buildUserMessage(input.job, input.profile),
+    responseSchema: COVER_LETTER_RESPONSE_SCHEMA,
+    maxOutputTokens: 1024,
+  })) as CoverLetterContent
 }

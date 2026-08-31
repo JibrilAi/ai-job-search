@@ -37,8 +37,8 @@ SCRAPE_QUEUE consumer (queue-consumers/scrapeConsumer.ts)
 
 RANK_QUEUE consumer (queue-consumers/rankConsumer.ts)
   -> loads the job + that user's profile
-  -> calls the Claude API (lib/ranking/claudeClient.ts) with a forced
-     submit_ranking tool call, reproducing 04-job-evaluation.md's rubric
+  -> calls the Gemini API (lib/ranking/geminiClient.ts) with forced
+     structured JSON output, reproducing 04-job-evaluation.md's rubric
   -> computes the weighted score server-side (never trusts the model's math)
   -> writes to user_job_rankings
 ```
@@ -46,8 +46,8 @@ RANK_QUEUE consumer (queue-consumers/rankConsumer.ts)
 Shared scrape, per-user matching (see README/plan): the `jobs` table is one
 shared pool scraped once; `user_job_rankings` is the per-user fan-out. This
 is why a new job costs one scrape but N ranking calls (one per user with a
-profile) -- the plan's cost-mitigation notes (prompt caching, pre-filtering)
-apply here as usage grows.
+profile) -- the plan's cost-mitigation notes (pre-filtering, staying within
+Gemini's free-tier daily quota) apply here as usage grows.
 
 ## Data model
 

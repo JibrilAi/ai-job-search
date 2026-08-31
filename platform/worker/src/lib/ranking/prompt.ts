@@ -26,7 +26,7 @@ location_verdict: "PASS" if within commute range or remote with occasional offic
 - career: does this role advance the candidate's career goals and contain energizing (not draining) tasks. 80-100 strongly aligned with clear growth path; 60-79 partially aligned; 40-59 doesn't build toward goals; 0-39 dead end or backwards step.
 
 ## Output
-Call the submit_ranking tool with your evaluation. strengths and gaps should each be 2-5 short, specific bullet points grounded in the actual posting and profile -- never generic filler.`
+Respond with your evaluation as JSON matching the required schema. strengths and gaps should each be 2-5 short, specific bullet points grounded in the actual posting and profile -- never generic filler.`
 
 export interface RankingInput {
   job: Pick<JobRow, "title" | "company" | "location" | "description">
