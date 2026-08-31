@@ -1,7 +1,7 @@
 import type { Env } from "../types.js"
 
 const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models"
-const DEFAULT_MODEL = "gemini-2.5-flash"
+const DEFAULT_MODEL = "gemini-3.6-flash"
 
 /**
  * Shared Gemini structured-output call: a system prompt + one user message,
