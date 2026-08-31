@@ -11,17 +11,22 @@ export default function SignupLogin() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
+  const [magicLinkSentTo, setMagicLinkSentTo] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | undefined>(undefined)
   const turnstileRef = useRef<TurnstileHandle>(null)
   const { refresh } = useAuth()
   const navigate = useNavigate()
 
+  function switchMode(next: Mode) {
+    setMode(next)
+    setError(null)
+    setMagicLinkSentTo(null)
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setInfo(null)
     setSubmitting(true)
     try {
       if (mode === "signup") {
@@ -34,7 +39,7 @@ export default function SignupLogin() {
         navigate("/dashboard")
       } else {
         await authApi.magicLink(email, turnstileToken)
-        setInfo("If that email is registered, a sign-in link is on its way. Check your inbox.")
+        setMagicLinkSentTo(email)
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.")
@@ -45,18 +50,36 @@ export default function SignupLogin() {
     }
   }
 
+  if (magicLinkSentTo) {
+    return (
+      <div className="app-shell" style={{ maxWidth: 420, paddingTop: 80 }}>
+        <div className="card auth-confirm">
+          <div className="auth-confirm-icon">✓</div>
+          <h1 style={{ marginTop: 0 }}>Check your inbox</h1>
+          <p>
+            If <strong>{magicLinkSentTo}</strong> is registered, a sign-in link is on its way. It expires in 15
+            minutes.
+          </p>
+          <button type="button" className="secondary" onClick={() => switchMode("magic-link")}>
+            Use a different email
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app-shell" style={{ maxWidth: 420, paddingTop: 80 }}>
       <div className="card">
         <h1 style={{ marginTop: 0 }}>AI Job Search</h1>
         <div className="tabs">
-          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
+          <button className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")} type="button">
             Log in
           </button>
-          <button className={mode === "signup" ? "active" : ""} onClick={() => setMode("signup")} type="button">
+          <button className={mode === "signup" ? "active" : ""} onClick={() => switchMode("signup")} type="button">
             Sign up
           </button>
-          <button className={mode === "magic-link" ? "active" : ""} onClick={() => setMode("magic-link")} type="button">
+          <button className={mode === "magic-link" ? "active" : ""} onClick={() => switchMode("magic-link")} type="button">
             Magic link
           </button>
         </div>
@@ -81,9 +104,14 @@ export default function SignupLogin() {
           )}
           <Turnstile ref={turnstileRef} onVerify={setTurnstileToken} onExpire={() => setTurnstileToken(undefined)} />
           {error && <p className="error-text">{error}</p>}
-          {info && <p className="muted">{info}</p>}
           <button type="submit" disabled={submitting}>
-            {mode === "signup" ? "Create account" : mode === "login" ? "Log in" : "Send magic link"}
+            {submitting
+              ? "Please wait…"
+              : mode === "signup"
+                ? "Create account"
+                : mode === "login"
+                  ? "Log in"
+                  : "Send magic link"}
           </button>
         </form>
       </div>
