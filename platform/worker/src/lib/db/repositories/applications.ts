@@ -104,6 +104,13 @@ export async function getApplication(env: Env, id: string, userId: string): Prom
     .first<ApplicationRow>()
 }
 
+/** Used by the auto-draft pipeline to avoid redrafting on a re-rank. */
+export async function findApplicationForJob(env: Env, userId: string, jobId: string): Promise<ApplicationRow | null> {
+  return env.DB.prepare(`SELECT ${SELECT_COLUMNS} FROM applications WHERE user_id = ? AND job_id = ? LIMIT 1`)
+    .bind(userId, jobId)
+    .first<ApplicationRow>()
+}
+
 export async function listApplicationsForUser(env: Env, userId: string): Promise<ApplicationRow[]> {
   const { results } = await env.DB.prepare(`SELECT ${SELECT_COLUMNS} FROM applications WHERE user_id = ? ORDER BY updated_at DESC`)
     .bind(userId)
@@ -134,4 +141,22 @@ export async function updateApplicationStatus(
     .run()
 
   return getApplication(env, id, userId)
+}
+
+/** Attaches generated-document ids to an application, e.g. after auto-drafting. */
+export async function updateApplicationDocuments(
+  env: Env,
+  id: string,
+  userId: string,
+  docs: { cvDocumentId?: string | null; coverLetterDocumentId?: string | null },
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE applications SET
+       cv_document_id = COALESCE(?, cv_document_id),
+       cover_letter_document_id = COALESCE(?, cover_letter_document_id),
+       updated_at = ?
+     WHERE id = ? AND user_id = ?`,
+  )
+    .bind(docs.cvDocumentId ?? null, docs.coverLetterDocumentId ?? null, new Date().toISOString(), id, userId)
+    .run()
 }

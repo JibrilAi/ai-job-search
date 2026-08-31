@@ -210,6 +210,10 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
       citizenshipOrPr: strOrNull(eligibility.citizenshipOrPr),
       visaConstraintsNote: strOrNull(eligibility.visaConstraintsNote),
     },
+    // Not derivable from a resume PDF -- the frontend's merge always keeps
+    // the form's existing value for this field instead (ProfileSetup.tsx's
+    // mergeProfile), this is just a placeholder to satisfy the type.
+    autoApplyEnabled: false,
   }
 }
 

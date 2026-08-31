@@ -23,6 +23,7 @@ const profile: Profile = {
   targetSectors: [],
   dealbreakers: [],
   eligibility: { citizenshipOrPr: null, visaConstraintsNote: null },
+  autoApplyEnabled: false,
   profileVersion: 1,
   updatedAt: new Date().toISOString(),
 }

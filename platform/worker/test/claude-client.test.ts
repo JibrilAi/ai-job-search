@@ -24,6 +24,7 @@ const fakeProfile: Profile = {
   targetSectors: [],
   dealbreakers: [],
   eligibility: { citizenshipOrPr: "Danish citizen", visaConstraintsNote: null },
+  autoApplyEnabled: false,
   profileVersion: 1,
   updatedAt: new Date().toISOString(),
 }

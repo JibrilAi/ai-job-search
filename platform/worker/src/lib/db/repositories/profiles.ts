@@ -73,6 +73,11 @@ export interface Profile {
   targetSectors: string[]
   dealbreakers: string[]
   eligibility: Eligibility
+  // When true, a job that ranks Strong/Good Fit for this user gets a
+  // tailored CV, cover letter, and a "drafted" application entry created
+  // automatically -- see lib/documents/autoDraft.ts. Never auto-submits
+  // anything to a job board.
+  autoApplyEnabled: boolean
   profileVersion: number
   updatedAt: string
 }
@@ -98,6 +103,7 @@ interface ProfileRow {
   targetSectorsJson: string
   dealbreakersJson: string
   eligibilityJson: string
+  autoApplyEnabled: number
   profileVersion: number
   updatedAt: string
 }
@@ -124,6 +130,7 @@ function rowToProfile(row: ProfileRow): Profile {
     targetSectors: JSON.parse(row.targetSectorsJson),
     dealbreakers: JSON.parse(row.dealbreakersJson),
     eligibility: JSON.parse(row.eligibilityJson),
+    autoApplyEnabled: !!row.autoApplyEnabled,
     profileVersion: row.profileVersion,
     updatedAt: row.updatedAt,
   }
@@ -139,8 +146,8 @@ export async function getProfile(env: Env, userId: string): Promise<Profile | nu
             publications_json as publicationsJson, awards_json as awardsJson,
             behavioral_json as behavioralJson, motivation_json as motivationJson,
             target_sectors_json as targetSectorsJson, dealbreakers_json as dealbreakersJson,
-            eligibility_json as eligibilityJson, profile_version as profileVersion,
-            updated_at as updatedAt
+            eligibility_json as eligibilityJson, auto_apply_enabled as autoApplyEnabled,
+            profile_version as profileVersion, updated_at as updatedAt
      FROM profiles WHERE user_id = ?`,
   )
     .bind(userId)
@@ -161,8 +168,9 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
        user_id, name, city, country, commute_constraints, cv_language, employment_status,
        linkedin_headline, languages_json, education_json, experience_json, skills_json,
        certifications_json, publications_json, awards_json, behavioral_json, motivation_json,
-       target_sectors_json, dealbreakers_json, eligibility_json, profile_version, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       target_sectors_json, dealbreakers_json, eligibility_json, auto_apply_enabled,
+       profile_version, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        name = excluded.name, city = excluded.city, country = excluded.country,
        commute_constraints = excluded.commute_constraints, cv_language = excluded.cv_language,
@@ -173,6 +181,7 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
        awards_json = excluded.awards_json, behavioral_json = excluded.behavioral_json,
        motivation_json = excluded.motivation_json, target_sectors_json = excluded.target_sectors_json,
        dealbreakers_json = excluded.dealbreakers_json, eligibility_json = excluded.eligibility_json,
+       auto_apply_enabled = excluded.auto_apply_enabled,
        profile_version = excluded.profile_version, updated_at = excluded.updated_at`,
   )
     .bind(
@@ -196,6 +205,7 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
       JSON.stringify(input.targetSectors ?? []),
       JSON.stringify(input.dealbreakers ?? []),
       JSON.stringify(input.eligibility ?? { citizenshipOrPr: null, visaConstraintsNote: null }),
+      input.autoApplyEnabled ? 1 : 0,
       nextVersion,
       updatedAt,
     )
