@@ -21,6 +21,18 @@ function gateClass(v: string | null): string {
   return ""
 }
 
+function statusClass(status: string): string {
+  if (["hired", "offer"].includes(status)) return "strong"
+  if (status === "interview") return "good"
+  if (status === "applied" || status === "drafted") return "moderate"
+  return "weak"
+}
+
+function daysUntil(dateStr: string): number {
+  const ms = new Date(dateStr).getTime() - new Date().setHours(0, 0, 0, 0)
+  return Math.round(ms / 86_400_000)
+}
+
 export default function JobFeed() {
   const [rows, setRows] = useState<RankedJobFeedRow[] | null>(null)
   const [applications, setApplications] = useState<Application[] | null>(null)
@@ -46,6 +58,16 @@ export default function JobFeed() {
   const strongMatches = rows?.filter((r) => r.rankVerdict?.startsWith("Strong") || r.rankVerdict?.startsWith("Good")).length ?? null
   const activeApplications = applications?.filter((a) => ACTIVE_STATUSES.has(a.status)).length ?? null
   const profileIncomplete = profile !== undefined && (!profile || !profile.name)
+
+  const today = new Date().toISOString().slice(0, 10)
+  const upcomingDeadlines = (applications ?? [])
+    .filter((a) => a.deadline && a.deadline >= today && ACTIVE_STATUSES.has(a.status))
+    .sort((a, b) => (a.deadline! < b.deadline! ? -1 : 1))
+    .slice(0, 3)
+
+  const recentActivity = [...(applications ?? [])]
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    .slice(0, 3)
 
   return (
     <div className="app-shell">
@@ -84,6 +106,49 @@ export default function JobFeed() {
           <div className="label">In progress</div>
         </div>
       </div>
+
+      {(upcomingDeadlines.length > 0 || recentActivity.length > 0) && (
+        <div className="dashboard-widgets">
+          {upcomingDeadlines.length > 0 && (
+            <div className="card">
+              <h3 style={{ marginTop: 0 }}>Upcoming deadlines</h3>
+              <ul className="plain">
+                {upcomingDeadlines.map((a) => (
+                  <li key={a.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                    <span>
+                      {a.role} — {a.company}
+                    </span>
+                    <span className="muted">
+                      {daysUntil(a.deadline!) === 0 ? "today" : `${daysUntil(a.deadline!)}d`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/applications" className="muted" style={{ textDecoration: "none" }}>
+                View all applications →
+              </Link>
+            </div>
+          )}
+          {recentActivity.length > 0 && (
+            <div className="card">
+              <h3 style={{ marginTop: 0 }}>Recent activity</h3>
+              <ul className="plain">
+                {recentActivity.map((a) => (
+                  <li key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
+                    <span>
+                      {a.role} — {a.company}
+                    </span>
+                    <span className={`badge ${statusClass(a.status)}`}>{a.status}</span>
+                  </li>
+                ))}
+              </ul>
+              <Link to="/applications" className="muted" style={{ textDecoration: "none" }}>
+                View all applications →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       <label style={{ display: "flex", alignItems: "center", gap: 6, margin: "20px 0 12px" }}>
         <input type="checkbox" checked={includeVetoed} onChange={(e) => setIncludeVetoed(e.target.checked)} />

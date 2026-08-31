@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { applicationsApi, ApiError, type Application, type ApplicationStatus } from "../api/client.js"
 
 const STATUSES: ApplicationStatus[] = [
@@ -101,6 +102,11 @@ export default function ApplicationTracker() {
                 {app.sector ?? "No sector"} · updated {new Date(app.updatedAt).toLocaleDateString()}
                 {app.deadline ? ` · deadline ${app.deadline}` : ""}
               </div>
+              {app.jobId && (
+                <Link to={`/jobs/${app.jobId}`} className="meta" style={{ display: "inline-block", marginTop: 4 }}>
+                  View job posting →
+                </Link>
+              )}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span className={`badge ${statusClass(app.status)}`}>{app.status}</span>

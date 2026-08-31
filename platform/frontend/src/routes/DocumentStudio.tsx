@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react"
-import { documentsApi, ApiError, type GeneratedDocument, type AtsReport } from "../api/client.js"
+import { useSearchParams } from "react-router-dom"
+import { documentsApi, rankingsApi, ApiError, type GeneratedDocument, type AtsReport, type RankedJobFeedRow } from "../api/client.js"
 
 export default function DocumentStudio() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [documents, setDocuments] = useState<GeneratedDocument[] | null>(null)
-  const [cvJobId, setCvJobId] = useState("")
-  const [jobId, setJobId] = useState("")
+  const [jobs, setJobs] = useState<RankedJobFeedRow[] | null>(null)
+  const [jobsError, setJobsError] = useState<string | null>(null)
+  const [targetJobId, setTargetJobId] = useState(searchParams.get("jobId") ?? "")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<"cv" | "cover" | null>(null)
   const [lastReport, setLastReport] = useState<AtsReport | null>(null)
@@ -18,11 +21,23 @@ export default function DocumentStudio() {
 
   useEffect(load, [])
 
+  useEffect(() => {
+    rankingsApi
+      .feed(true)
+      .then(({ rankings }) => setJobs(rankings))
+      .catch((err) => setJobsError(err instanceof ApiError ? err.message : "Could not load your jobs."))
+  }, [])
+
+  function selectTargetJob(next: string) {
+    setTargetJobId(next)
+    setSearchParams(next ? { jobId: next } : {})
+  }
+
   async function generateCv() {
     setBusy("cv")
     setError(null)
     try {
-      const { atsReport } = await documentsApi.generateCv(cvJobId.trim() || undefined)
+      const { atsReport } = await documentsApi.generateCv(targetJobId || undefined)
       setLastReport(atsReport)
       load()
     } catch (err) {
@@ -33,14 +48,14 @@ export default function DocumentStudio() {
   }
 
   async function generateCoverLetter() {
-    if (!jobId.trim()) {
-      setError("Enter a job ID first (find it on a job's detail page URL).")
+    if (!targetJobId) {
+      setError("Pick a target job first — a cover letter is always written for a specific role.")
       return
     }
     setBusy("cover")
     setError(null)
     try {
-      const { atsReport } = await documentsApi.generateCoverLetter(jobId.trim())
+      const { atsReport } = await documentsApi.generateCoverLetter(targetJobId)
       setLastReport(atsReport)
       load()
     } catch (err) {
@@ -56,12 +71,28 @@ export default function DocumentStudio() {
       <p className="muted">Generate a tailored CV or cover letter as a PDF, rendered from your profile.</p>
 
       <div className="card">
-        <h3>Generate CV</h3>
-        <p className="muted">Uses your saved profile directly. Add a job ID to tailor the opening summary and highlighted skills to that posting.</p>
+        <h3>Target job</h3>
+        <p className="muted">
+          Pick the job you're applying to — it tailors both documents below. Leave it unselected to generate a generic
+          CV (cover letters always need a specific job).
+        </p>
+        {jobsError && <p className="error-text">{jobsError}</p>}
         <div className="form-row">
-          <label>Job ID (optional)</label>
-          <input value={cvJobId} onChange={(e) => setCvJobId(e.target.value)} placeholder="e.g. from /jobs/&lt;id&gt; -- leave blank for a generic CV" />
+          <label>Job</label>
+          <select value={targetJobId} onChange={(e) => selectTargetJob(e.target.value)}>
+            <option value="">No specific job</option>
+            {jobs?.map((j) => (
+              <option key={j.jobId} value={j.jobId}>
+                {j.title} — {j.company}
+              </option>
+            ))}
+          </select>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Generate CV</h3>
+        <p className="muted">Uses your saved profile directly. With a target job selected, tailors the opening summary and highlighted skills to it.</p>
         <button onClick={generateCv} disabled={busy !== null}>
           {busy === "cv" ? "Generating…" : "Generate CV"}
         </button>
@@ -69,12 +100,8 @@ export default function DocumentStudio() {
 
       <div className="card">
         <h3>Generate cover letter</h3>
-        <p className="muted">Tailored to a specific job by its ID.</p>
-        <div className="form-row">
-          <label>Job ID</label>
-          <input value={jobId} onChange={(e) => setJobId(e.target.value)} placeholder="e.g. from /jobs/&lt;id&gt;" />
-        </div>
-        <button onClick={generateCoverLetter} disabled={busy !== null}>
+        <p className="muted">Requires a target job, selected above.</p>
+        <button onClick={generateCoverLetter} disabled={busy !== null || !targetJobId}>
           {busy === "cover" ? "Drafting…" : "Generate cover letter"}
         </button>
       </div>

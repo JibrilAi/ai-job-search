@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { authApi, ApiError } from "../api/client.js"
 import { useAuth } from "../api/AuthContext.js"
 
@@ -31,7 +31,7 @@ export default function AuthVerify() {
         {error ? (
           <>
             <p className="error-text">{error}</p>
-            <a href="/login">Back to sign in</a>
+            <Link to="/login">Back to sign in</Link>
           </>
         ) : (
           <p className="muted">Signing you in…</p>

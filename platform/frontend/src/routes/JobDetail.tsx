@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useParams } from "react-router-dom"
+import { Link, useParams } from "react-router-dom"
 import { jobsApi, rankingsApi, ApiError, type JobSummary, type Ranking } from "../api/client.js"
 
 export default function JobDetail() {
@@ -39,12 +39,24 @@ export default function JobDetail() {
 
   return (
     <div className="app-shell">
+      <Link to="/dashboard" className="muted" style={{ display: "inline-block", marginBottom: 12, textDecoration: "none" }}>
+        ← Back to dashboard
+      </Link>
       <h1>
         {job.title} <span className="muted">at {job.company}</span>
       </h1>
       <p className="muted">
         {job.location ?? "Location not specified"} · <a href={job.sourceUrl} target="_blank" rel="noreferrer">view original posting</a>
       </p>
+
+      <div className="card" style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Link to={`/documents?jobId=${job.id}`} className="btn-primary">
+          Generate CV / cover letter for this job
+        </Link>
+        <Link to="/applications" className="btn-secondary">
+          Track this application
+        </Link>
+      </div>
 
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
