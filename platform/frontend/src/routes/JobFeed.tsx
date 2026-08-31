@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { rankingsApi, ApiError, type RankedJobFeedRow } from "../api/client.js"
+import { rankingsApi, applicationsApi, profileApi, ApiError, type RankedJobFeedRow, type Application, type Profile } from "../api/client.js"
+
+const ACTIVE_STATUSES = new Set(["drafted", "applied", "interview", "offer"])
 
 function verdictClass(verdict: string | null): string {
   if (!verdict) return ""
@@ -20,6 +22,8 @@ function gateClass(v: string | null): string {
 
 export default function JobFeed() {
   const [rows, setRows] = useState<RankedJobFeedRow[] | null>(null)
+  const [applications, setApplications] = useState<Application[] | null>(null)
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [includeVetoed, setIncludeVetoed] = useState(false)
 
@@ -31,11 +35,54 @@ export default function JobFeed() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load your job feed."))
   }, [includeVetoed])
 
+  useEffect(() => {
+    applicationsApi.list().then(({ applications }) => setApplications(applications)).catch(() => setApplications([]))
+    profileApi.get().then(({ profile }) => setProfile(profile)).catch(() => setProfile(null))
+  }, [])
+
+  const strongMatches = rows?.filter((r) => r.rankVerdict?.startsWith("Strong") || r.rankVerdict?.startsWith("Good")).length ?? null
+  const activeApplications = applications?.filter((a) => ACTIVE_STATUSES.has(a.status)).length ?? null
+  const profileIncomplete = profile !== undefined && (!profile || !profile.name)
+
   return (
     <div className="app-shell">
-      <h1>Job feed</h1>
+      <h1>Dashboard</h1>
       <p className="muted">Ranked against your profile. Jobs are scraped once and shared; scores are yours alone.</p>
-      <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12 }}>
+
+      {profileIncomplete && (
+        <div className="card banner-card">
+          <div>
+            <strong>Your profile is empty.</strong>
+            <p className="muted" style={{ margin: "4px 0 0" }}>
+              Add your skills and experience to start getting ranked jobs and tailored documents.
+            </p>
+          </div>
+          <Link to="/profile" className="btn-primary">
+            Complete profile
+          </Link>
+        </div>
+      )}
+
+      <div className="score-grid dashboard-stat-grid">
+        <div className="score-tile">
+          <div className="value">{rows?.length ?? "—"}</div>
+          <div className="label">Ranked jobs</div>
+        </div>
+        <div className="score-tile">
+          <div className="value">{strongMatches ?? "—"}</div>
+          <div className="label">Strong / good matches</div>
+        </div>
+        <div className="score-tile">
+          <div className="value">{applications?.length ?? "—"}</div>
+          <div className="label">Applications tracked</div>
+        </div>
+        <div className="score-tile">
+          <div className="value">{activeApplications ?? "—"}</div>
+          <div className="label">In progress</div>
+        </div>
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 6, margin: "20px 0 12px" }}>
         <input type="checkbox" checked={includeVetoed} onChange={(e) => setIncludeVetoed(e.target.checked)} />
         Show jobs outside your location, language, or eligibility (hidden by default)
       </label>
