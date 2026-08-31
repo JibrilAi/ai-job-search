@@ -34,7 +34,11 @@ auth.post("/signup", async (c) => {
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
-  c.executionCtx.waitUntil(sendWelcomeEmail(c.env, user.email).catch((err) => console.error("welcome email failed:", err)))
+  try {
+    await sendWelcomeEmail(c.env, user.email)
+  } catch (err) {
+    console.error("welcome email failed:", err)
+  }
   return c.json({ user: { id: user.id, email: user.email, role: user.role } }, 201)
 })
 
@@ -102,7 +106,11 @@ auth.get("/verify", async (c) => {
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
   if (isNewUser) {
-    c.executionCtx.waitUntil(sendWelcomeEmail(c.env, user.email).catch((err) => console.error("welcome email failed:", err)))
+    try {
+      await sendWelcomeEmail(c.env, user.email)
+    } catch (err) {
+      console.error("welcome email failed:", err)
+    }
   }
   return c.json({ user: { id: user.id, email: user.email, role: user.role } })
 })
