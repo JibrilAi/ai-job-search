@@ -96,7 +96,13 @@ export async function callOpenRouter(
   // response is diagnosable from logs instead of a bare SyntaxError.
   const jsonText = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "")
   try {
-    return JSON.parse(jsonText) as unknown
+    const parsed = JSON.parse(jsonText) as unknown
+    // Cheap, always-on diagnostic: which free model actually answered.
+    // Free-model routing means this varies call to call, and knowing
+    // which model produced a given (possibly malformed) result is the
+    // difference between guessing at a fix and actually finding one.
+    console.log(`OpenRouter (${data.model ?? "unknown model"}) responded: ${jsonText.slice(0, 500)}`)
+    return parsed
   } catch {
     throw new Error(`OpenRouter (${data.model ?? "unknown model"}) returned unparseable JSON: ${text.slice(0, 500)}`)
   }

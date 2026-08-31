@@ -59,6 +59,17 @@ ${JSON.stringify(input.profile, null, 2)}`
       ? (result as { value: unknown }).value
       : result
 
-  if (isList) return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
-  return typeof value === "string" ? value : ""
+  if (isList) {
+    const list = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
+    if (list.length === 0) {
+      console.warn(`suggestFieldValue("${input.fieldLabel}") -- empty result, raw provider value: ${JSON.stringify(value)}`)
+    }
+    return list
+  }
+
+  const str = typeof value === "string" ? value : ""
+  if (str === "") {
+    console.warn(`suggestFieldValue("${input.fieldLabel}") -- empty result, raw provider value: ${JSON.stringify(value)}`)
+  }
+  return str
 }
