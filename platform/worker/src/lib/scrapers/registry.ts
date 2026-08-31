@@ -17,3 +17,6 @@ export function getScraper(portal: string): PortalScraper | null {
   const factory = scrapers[portal]
   return factory ? factory() : null
 }
+
+/** Portals that accept a free-text `query` -- used to fan a user's search preferences out to every keyword-searchable portal. */
+export const KEYWORD_SEARCHABLE_PORTALS = Object.keys(scrapers)

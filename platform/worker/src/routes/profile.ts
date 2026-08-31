@@ -4,6 +4,9 @@ import { requireAuth } from "../lib/auth/requireAuth.js"
 import { getProfile, upsertProfile, type ProfileInput } from "../lib/db/repositories/profiles.js"
 import { extractPdfText } from "../lib/documents/extractText.js"
 import { extractProfileFromResumeText } from "../lib/profile/resumeExtraction.js"
+import { suggestScrapeQuery } from "../lib/scrapeQuerySuggestion.js"
+import { getUserScrapeQueries, upsertUserScrapeQuery } from "../lib/db/repositories/scrapeQueries.js"
+import { KEYWORD_SEARCHABLE_PORTALS } from "../lib/scrapers/registry.js"
 
 const MAX_RESUME_BYTES = 10 * 1024 * 1024
 
@@ -49,6 +52,36 @@ profile.post("/resume", async (c) => {
     console.error("resume extraction failed:", err)
     return c.json({ error: "could not extract a profile from this resume, please fill it in manually" }, 502)
   }
+})
+
+// Auto-suggested (from the saved profile's skills/domain/target sectors) but
+// user-editable search scope -- without this, every user's job pool is built
+// entirely from a couple of broad, untargeted admin-seeded scrape_queries
+// rows (see migrations/0002 and 0006), which skew toward whatever those
+// portals surface by default rather than any individual user's actual field.
+profile.get("/search-preferences", async (c) => {
+  const userId = c.get("userId")
+  const [p, existing] = await Promise.all([getProfile(c.env, userId), getUserScrapeQueries(c.env, userId)])
+  const suggestion = p ? suggestScrapeQuery(p) : { query: "", location: null }
+  const saved = existing[0] ? (JSON.parse(existing[0].queryJson) as { query?: string; location?: string | null }) : null
+  return c.json({
+    suggestion,
+    saved: saved ? { query: saved.query ?? "", location: saved.location ?? null, enabled: !!existing[0].enabled } : null,
+  })
+})
+
+profile.put("/search-preferences", async (c) => {
+  const body = await c.req.json<{ query?: string; location?: string | null; enabled?: boolean }>().catch(() => null)
+  if (!body || typeof body.query !== "string") return c.json({ error: "query is required" }, 400)
+
+  const userId = c.get("userId")
+  const enabled = body.enabled ?? true
+  const queryJson = JSON.stringify({ query: body.query, location: body.location ?? null, jobage: 7, limit: 25 })
+
+  await Promise.all(
+    KEYWORD_SEARCHABLE_PORTALS.map((portal) => upsertUserScrapeQuery(c.env, userId, portal, queryJson, enabled)),
+  )
+  return c.json({ ok: true })
 })
 
 export default profile

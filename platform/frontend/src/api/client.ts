@@ -95,6 +95,16 @@ export const profileApi = {
     form.set("resume", file)
     return requestFormData<{ profile: ProfileInput }>("/profile/resume", form)
   },
+  searchPreferences: () =>
+    request<{
+      suggestion: { query: string; location: string | null }
+      saved: { query: string; location: string | null; enabled: boolean } | null
+    }>("/profile/search-preferences"),
+  saveSearchPreferences: (query: string, location: string | null) =>
+    request<{ ok: boolean }>("/profile/search-preferences", {
+      method: "PUT",
+      body: JSON.stringify({ query, location, enabled: true }),
+    }),
 }
 
 export interface JobSummary {
