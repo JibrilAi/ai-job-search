@@ -59,10 +59,15 @@ crons = ["0 */6 * * *"]
 
 [vars]
 ENVIRONMENT = "production"
-# Set to the deployed Pages URL -- the Worker's CORS check rejects requests
-# from any other origin. If the Pages project's URL changes (e.g. a custom
-# domain is added later), update this and redeploy the Worker.
-FRONTEND_ORIGIN = "https://ai-job-search-2hg.pages.dev"
+# Comma-separated list of origins allowed to call this API -- the Worker's
+# CORS check (src/index.ts) rejects any request from an origin not in this
+# list. Include every domain the frontend is actually served from (the
+# *.pages.dev URL and any custom domain(s) pointed at the Pages project).
+# Adding a domain later (e.g. a new custom domain) means updating this list
+# and redeploying the Worker -- a domain missing here fails silently in the
+# browser as a CORS error, which the frontend can only show as a generic
+# "Something went wrong" (see client.ts's request()).
+FRONTEND_ORIGIN = "https://inhr.ca,https://www.inhr.ca,https://ai-job-search-2hg.pages.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
 #   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY,
