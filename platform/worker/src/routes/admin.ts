@@ -1,8 +1,10 @@
 import { Hono } from "hono"
 import type { Env } from "../types.js"
 import { requireAuth, requireAdmin } from "../lib/auth/requireAuth.js"
-import { countAdmins, listUsers, setUserRole, type UserRole } from "../lib/db/repositories/users.js"
-import { listAllApplications } from "../lib/db/repositories/applications.js"
+import { countAdmins, deleteUser, findUserById, listUsers, setUserRole, type UserRole } from "../lib/db/repositories/users.js"
+import { listAllApplications, listApplicationsForUser } from "../lib/db/repositories/applications.js"
+import { getProfile } from "../lib/db/repositories/profiles.js"
+import { listGeneratedDocumentsForUser } from "../lib/db/repositories/documents.js"
 
 const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>()
 admin.use("*", requireAuth, requireAdmin)
@@ -42,6 +44,22 @@ admin.get("/users", async (c) => {
   })
 })
 
+admin.get("/users/:id", async (c) => {
+  const targetId = c.req.param("id")
+  const user = await findUserById(c.env, targetId)
+  if (!user) return c.json({ error: "user not found" }, 404)
+
+  const [profile, applications] = await Promise.all([
+    getProfile(c.env, targetId),
+    listApplicationsForUser(c.env, targetId),
+  ])
+  return c.json({
+    user: { id: user.id, email: user.email, role: user.role, emailVerified: !!user.emailVerified, createdAt: user.createdAt },
+    profile,
+    applications,
+  })
+})
+
 admin.get("/applications", async (c) => {
   const limit = Number(c.req.query("limit") ?? 100)
   const offset = Number(c.req.query("offset") ?? 0)
@@ -65,6 +83,27 @@ admin.patch("/users/:id/role", async (c) => {
   }
 
   await setUserRole(c.env, targetId, role as UserRole)
+  return c.json({ ok: true })
+})
+
+admin.delete("/users/:id", async (c) => {
+  const targetId = c.req.param("id")
+  const actingUserId = c.get("userId")
+  if (targetId === actingUserId) return c.json({ error: "cannot delete your own account here" }, 400)
+
+  const target = await findUserById(c.env, targetId)
+  if (!target) return c.json({ error: "user not found" }, 404)
+  if (target.role === "admin") {
+    const admins = await countAdmins(c.env)
+    if (admins <= 1) return c.json({ error: "cannot delete the last admin" }, 400)
+  }
+
+  // Clean up R2 objects before the D1 rows referencing them are gone --
+  // once generated_documents is deleted there's no way to find these keys.
+  const documents = await listGeneratedDocumentsForUser(c.env, targetId)
+  await Promise.all(documents.map((d) => c.env.DOCUMENTS_BUCKET.delete(d.r2Key)))
+
+  await deleteUser(c.env, targetId)
   return c.json({ ok: true })
 })
 

@@ -99,6 +99,8 @@ button:hover:not(:disabled) { background: var(--accent-hover); }
 button:active:not(:disabled) { transform: translateY(1px); }
 button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
 button.secondary:hover:not(:disabled) { background: var(--panel-raised); border-color: var(--accent); }
+button.secondary.danger { color: var(--bad); }
+button.secondary.danger:hover:not(:disabled) { background: rgba(239,83,80,0.1); border-color: var(--bad); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .error-text { color: var(--bad); font-size: 0.85rem; }
@@ -297,6 +299,48 @@ ul.plain li { padding: 4px 0; }
 }
 .admin-table th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; }
 .admin-table tr:last-child td { border-bottom: none; }
+
+.admin-table tr.clickable-row { cursor: pointer; transition: background 0.12s ease; }
+.admin-table tr.clickable-row:hover { background: var(--panel-raised); }
+
+.admin-row-actions { display: flex; gap: 8px; white-space: nowrap; }
+
+.admin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.admin-section-head h2 { margin: 0; }
+
+.admin-search {
+  width: 240px;
+  max-width: 100%;
+}
+
+.admin-user-cell { display: flex; align-items: center; gap: 10px; }
+
+.avatar-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(91,140,255,0.18);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.profile-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+.profile-summary-grid > div > .muted { font-size: 0.75rem; text-transform: uppercase; margin-bottom: 4px; }
 
 @media (max-width: 640px) {
   .top-nav { padding: 12px 16px; }
