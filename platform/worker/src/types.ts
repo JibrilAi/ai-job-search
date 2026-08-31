@@ -14,6 +14,7 @@ export interface Env {
   MAGIC_LINK_SECRET: string
   RESEND_API_KEY?: string
   RESEND_FROM_EMAIL?: string
+  TURNSTILE_SECRET_KEY?: string
 }
 
 export interface ScrapeQueueMessage {

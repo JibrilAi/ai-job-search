@@ -1,32 +1,28 @@
 import type { Env } from "../../../types.js"
 
+export type UserRole = "user" | "admin"
+
 export interface UserRow {
   id: string
   email: string
   passwordHash: string | null
   passwordSalt: string | null
   emailVerified: number
+  role: UserRole
   createdAt: string
 }
 
+const SELECT_FIELDS = `id, email, password_hash as passwordHash, password_salt as passwordSalt,
+            email_verified as emailVerified, role, created_at as createdAt`
+
 export async function findUserByEmail(env: Env, email: string): Promise<UserRow | null> {
-  return env.DB.prepare(
-    `SELECT id, email, password_hash as passwordHash, password_salt as passwordSalt,
-            email_verified as emailVerified, created_at as createdAt
-     FROM users WHERE email = ?`,
-  )
+  return env.DB.prepare(`SELECT ${SELECT_FIELDS} FROM users WHERE email = ?`)
     .bind(email.trim().toLowerCase())
     .first<UserRow>()
 }
 
 export async function findUserById(env: Env, id: string): Promise<UserRow | null> {
-  return env.DB.prepare(
-    `SELECT id, email, password_hash as passwordHash, password_salt as passwordSalt,
-            email_verified as emailVerified, created_at as createdAt
-     FROM users WHERE id = ?`,
-  )
-    .bind(id)
-    .first<UserRow>()
+  return env.DB.prepare(`SELECT ${SELECT_FIELDS} FROM users WHERE id = ?`).bind(id).first<UserRow>()
 }
 
 export async function createUser(
@@ -48,6 +44,7 @@ export async function createUser(
     passwordHash: params.passwordHash ?? null,
     passwordSalt: params.passwordSalt ?? null,
     emailVerified: params.emailVerified ? 1 : 0,
+    role: "user",
     createdAt,
   }
 }
@@ -60,4 +57,34 @@ export async function updatePassword(env: Env, userId: string, passwordHash: str
   await env.DB.prepare(`UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?`)
     .bind(passwordHash, passwordSalt, userId)
     .run()
+}
+
+export interface AdminUserRow extends UserRow {
+  profileSaved: number
+}
+
+export async function listUsers(env: Env): Promise<AdminUserRow[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT u.id, u.email, u.password_hash as passwordHash, u.password_salt as passwordSalt,
+            u.email_verified as emailVerified, u.role, u.created_at as createdAt,
+            CASE WHEN p.user_id IS NULL THEN 0 ELSE 1 END as profileSaved
+     FROM users u
+     LEFT JOIN profiles p ON p.user_id = u.id
+     ORDER BY u.created_at DESC`,
+  ).all<AdminUserRow>()
+  return results
+}
+
+export async function countUsers(env: Env): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) as count FROM users`).first<{ count: number }>()
+  return row?.count ?? 0
+}
+
+export async function countAdmins(env: Env): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) as count FROM users WHERE role = 'admin'`).first<{ count: number }>()
+  return row?.count ?? 0
+}
+
+export async function setUserRole(env: Env, userId: string, role: UserRole): Promise<void> {
+  await env.DB.prepare(`UPDATE users SET role = ? WHERE id = ?`).bind(role, userId).run()
 }

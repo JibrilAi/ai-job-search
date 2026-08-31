@@ -14,6 +14,7 @@ compatibility_flags = ["nodejs_compat"]
 #   wrangler secret put SESSION_SECRET
 #   wrangler secret put MAGIC_LINK_SECRET
 #   wrangler secret put RESEND_API_KEY
+#   wrangler secret put TURNSTILE_SECRET_KEY
 # ---------------------------------------------------------------------------
 
 [[d1_databases]]
@@ -64,7 +65,16 @@ ENVIRONMENT = "production"
 FRONTEND_ORIGIN = "https://ai-job-search-2hg.pages.dev"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
-#   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY
+#   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY,
+#   TURNSTILE_SECRET_KEY
+#
+# TURNSTILE_SECRET_KEY pairs with the frontend's VITE_TURNSTILE_SITE_KEY
+# (create a Turnstile widget at dash.cloudflare.com -> Turnstile). Without it,
+# signup/login/magic-link skip bot verification -- fine for dev, not for prod.
+#
+# To make the first admin: sign up normally, then run
+#   wrangler d1 execute ai_job_search_db --remote \
+#     --command "UPDATE users SET role='admin' WHERE email='you@example.com'"
 #
 # RESEND_FROM_EMAIL (optional [vars] entry, not a secret): the "Name <local@
 # yourdomain>" sender address for magic-link emails. Must be on a domain

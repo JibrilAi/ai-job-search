@@ -4,6 +4,7 @@ import { generateSalt, hashPassword, isPasswordStrongEnough, verifyPassword } fr
 import { clearSessionCookie, createSession, deleteSession, getSessionFromRequest, sessionCookie } from "../lib/auth/session.js"
 import { consumeMagicLinkToken, issueMagicLinkToken, magicLinkUrl } from "../lib/auth/magicLink.js"
 import { sendMagicLinkEmail } from "../lib/auth/email.js"
+import { verifyTurnstile } from "../lib/auth/turnstile.js"
 import { createUser, findUserByEmail, findUserById, updatePassword } from "../lib/db/repositories/users.js"
 
 const auth = new Hono<{ Bindings: Env }>()
@@ -13,13 +14,15 @@ function isSecure(c: { env: Env }): boolean {
 }
 
 auth.post("/signup", async (c) => {
-  const body = await c.req.json<{ email?: string; password?: string }>().catch(() => null)
+  const body = await c.req.json<{ email?: string; password?: string; turnstileToken?: string }>().catch(() => null)
   const email = body?.email?.trim().toLowerCase()
   const password = body?.password
   if (!email || !email.includes("@")) return c.json({ error: "a valid email is required" }, 400)
   if (!password || !isPasswordStrongEnough(password)) {
     return c.json({ error: "password must be at least 8 characters" }, 400)
   }
+  const humanVerified = await verifyTurnstile(c.env, body?.turnstileToken, c.req.header("CF-Connecting-IP"))
+  if (!humanVerified) return c.json({ error: "verification failed, please try again" }, 400)
 
   const existing = await findUserByEmail(c.env, email)
   if (existing) return c.json({ error: "an account with this email already exists" }, 409)
@@ -31,14 +34,16 @@ auth.post("/signup", async (c) => {
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
-  return c.json({ user: { id: user.id, email: user.email } }, 201)
+  return c.json({ user: { id: user.id, email: user.email, role: user.role } }, 201)
 })
 
 auth.post("/login", async (c) => {
-  const body = await c.req.json<{ email?: string; password?: string }>().catch(() => null)
+  const body = await c.req.json<{ email?: string; password?: string; turnstileToken?: string }>().catch(() => null)
   const email = body?.email?.trim().toLowerCase()
   const password = body?.password
   if (!email || !password) return c.json({ error: "email and password are required" }, 400)
+  const humanVerified = await verifyTurnstile(c.env, body?.turnstileToken, c.req.header("CF-Connecting-IP"))
+  if (!humanVerified) return c.json({ error: "verification failed, please try again" }, 400)
 
   const user = await findUserByEmail(c.env, email)
   if (!user || !user.passwordHash || !user.passwordSalt) {
@@ -52,7 +57,7 @@ auth.post("/login", async (c) => {
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
-  return c.json({ user: { id: user.id, email: user.email } })
+  return c.json({ user: { id: user.id, email: user.email, role: user.role } })
 })
 
 auth.post("/logout", async (c) => {
@@ -63,9 +68,11 @@ auth.post("/logout", async (c) => {
 })
 
 auth.post("/magic-link", async (c) => {
-  const body = await c.req.json<{ email?: string }>().catch(() => null)
+  const body = await c.req.json<{ email?: string; turnstileToken?: string }>().catch(() => null)
   const email = body?.email?.trim().toLowerCase()
   if (!email || !email.includes("@")) return c.json({ error: "a valid email is required" }, 400)
+  const humanVerified = await verifyTurnstile(c.env, body?.turnstileToken, c.req.header("CF-Connecting-IP"))
+  if (!humanVerified) return c.json({ error: "verification failed, please try again" }, 400)
 
   // Always respond 202 regardless of whether the account exists, so this
   // endpoint can't be used to enumerate registered emails.
@@ -91,7 +98,7 @@ auth.get("/verify", async (c) => {
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
-  return c.json({ user: { id: user.id, email: user.email } })
+  return c.json({ user: { id: user.id, email: user.email, role: user.role } })
 })
 
 auth.post("/reset-password", async (c) => {
@@ -115,7 +122,7 @@ auth.get("/session", async (c) => {
   if (!session) return c.json({ user: null }, 200)
   const user = await findUserById(c.env, session.userId)
   if (!user) return c.json({ user: null }, 200)
-  return c.json({ user: { id: user.id, email: user.email } })
+  return c.json({ user: { id: user.id, email: user.email, role: user.role } })
 })
 
 export default auth

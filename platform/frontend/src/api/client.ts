@@ -46,15 +46,17 @@ async function requestFormData<T>(path: string, form: FormData): Promise<T> {
 export interface CurrentUser {
   id: string
   email: string
+  role: "user" | "admin"
 }
 
 export const authApi = {
-  signup: (email: string, password: string) =>
-    request<{ user: CurrentUser }>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password }) }),
-  login: (email: string, password: string) =>
-    request<{ user: CurrentUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  signup: (email: string, password: string, turnstileToken?: string) =>
+    request<{ user: CurrentUser }>("/auth/signup", { method: "POST", body: JSON.stringify({ email, password, turnstileToken }) }),
+  login: (email: string, password: string, turnstileToken?: string) =>
+    request<{ user: CurrentUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, turnstileToken }) }),
   logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
-  magicLink: (email: string) => request<{ ok: boolean }>("/auth/magic-link", { method: "POST", body: JSON.stringify({ email }) }),
+  magicLink: (email: string, turnstileToken?: string) =>
+    request<{ ok: boolean }>("/auth/magic-link", { method: "POST", body: JSON.stringify({ email, turnstileToken }) }),
   verify: (token: string) => request<{ user: CurrentUser }>(`/auth/verify?token=${encodeURIComponent(token)}`),
   session: () => request<{ user: CurrentUser | null }>("/auth/session"),
 }
@@ -248,4 +250,29 @@ export const applicationsApi = {
       method: "PATCH",
       body: JSON.stringify({ status, note }),
     }),
+}
+
+export interface AdminStats {
+  users: number
+  jobs: number
+  applications: number
+  rankings: number
+  documents: number
+  scrapeQueries: number
+}
+
+export interface AdminUser {
+  id: string
+  email: string
+  role: "user" | "admin"
+  emailVerified: boolean
+  profileSaved: boolean
+  createdAt: string
+}
+
+export const adminApi = {
+  stats: () => request<{ stats: AdminStats }>("/admin/stats"),
+  users: () => request<{ users: AdminUser[] }>("/admin/users"),
+  setUserRole: (id: string, role: "user" | "admin") =>
+    request<{ ok: boolean }>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
 }

@@ -19,7 +19,7 @@ export default function AuthVerify() {
       .verify(token)
       .then(async () => {
         await refresh()
-        navigate("/")
+        navigate("/dashboard")
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "This sign-in link is invalid or expired."))
     // eslint-disable-next-line react-hooks/exhaustive-deps
