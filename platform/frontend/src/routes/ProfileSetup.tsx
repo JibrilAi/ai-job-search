@@ -107,7 +107,17 @@ function AiSuggest({
     setError(null)
     try {
       const { value } = await profileApi.suggestField(label, fieldType, currentValue, profile)
-      onApply(value)
+      // The AI can legitimately have nothing to go on yet (e.g. early in
+      // profile setup, before enough of the rest of the profile is
+      // filled in) -- applying an empty result would silently wipe out
+      // whatever the user already typed here, which reads as "the button
+      // stopped working" rather than the honest "no suggestion yet."
+      const isEmpty = Array.isArray(value) ? value.length === 0 : value === ""
+      if (isEmpty) {
+        setError("Not enough profile info yet for a suggestion here -- try filling in more fields first.")
+      } else {
+        onApply(value)
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "AI suggestion failed.")
     } finally {
