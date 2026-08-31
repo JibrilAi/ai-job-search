@@ -17,7 +17,16 @@ import { handleRankMessage } from "./queue-consumers/rankConsumer.js"
 const app = new Hono<{ Bindings: Env }>()
 
 app.use("*", async (c, next) => {
-  const middleware = cors({ origin: c.env.FRONTEND_ORIGIN, credentials: true })
+  // FRONTEND_ORIGIN may be a comma-separated list, so adding another domain
+  // (e.g. a custom domain alongside the *.pages.dev one) is a config change,
+  // not a code change.
+  const allowedOrigins = c.env.FRONTEND_ORIGIN.split(",")
+    .map((o) => o.trim())
+    .filter(Boolean)
+  const middleware = cors({
+    origin: (origin) => (allowedOrigins.includes(origin) ? origin : undefined),
+    credentials: true,
+  })
   return middleware(c, next)
 })
 
