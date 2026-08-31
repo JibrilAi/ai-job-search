@@ -264,6 +264,14 @@ ul.plain li { padding: 4px 0; }
 
 .dashboard-stat-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+.toggle-row input[type="checkbox"] { margin-top: 4px; width: 16px; height: 16px; flex-shrink: 0; }
+
 .banner-card {
   display: flex;
   align-items: center;

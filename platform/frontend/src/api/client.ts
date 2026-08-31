@@ -83,6 +83,7 @@ export interface Profile {
   targetSectors: string[]
   dealbreakers: string[]
   eligibility: { citizenshipOrPr: string | null; visaConstraintsNote: string | null }
+  autoApplyEnabled: boolean
   profileVersion: number
   updatedAt: string
 }
