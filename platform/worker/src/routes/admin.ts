@@ -5,6 +5,13 @@ import { countAdmins, deleteUser, findUserById, listUsers, setUserRole, type Use
 import { listAllApplications, listApplicationsForUser } from "../lib/db/repositories/applications.js"
 import { getProfile } from "../lib/db/repositories/profiles.js"
 import { listGeneratedDocumentsForUser } from "../lib/db/repositories/documents.js"
+import { listGlobalScrapeQueries } from "../lib/db/repositories/scrapeQueries.js"
+import {
+  getScrapeSchedule,
+  setScrapeIntervalMinutes,
+  MIN_INTERVAL_MINUTES,
+  MAX_INTERVAL_MINUTES,
+} from "../lib/db/repositories/scrapeSchedule.js"
 
 const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>()
 admin.use("*", requireAuth, requireAdmin)
@@ -68,6 +75,33 @@ admin.get("/applications", async (c) => {
     offset: Number.isFinite(offset) ? offset : 0,
   })
   return c.json({ applications })
+})
+
+admin.get("/schedule", async (c) => {
+  const [schedule, queries] = await Promise.all([getScrapeSchedule(c.env), listGlobalScrapeQueries(c.env)])
+  const nextRunAt = schedule.lastRunAt
+    ? new Date(new Date(schedule.lastRunAt).getTime() + schedule.intervalMinutes * 60_000).toISOString()
+    : null
+  return c.json({
+    schedule: { intervalMinutes: schedule.intervalMinutes, lastRunAt: schedule.lastRunAt, nextRunAt },
+    queries: queries.map((q) => ({ id: q.id, portal: q.portal, enabled: !!q.enabled, lastRunAt: q.lastRunAt })),
+  })
+})
+
+admin.patch("/schedule", async (c) => {
+  const body = await c.req.json<{ intervalMinutes?: number }>().catch(() => null)
+  const intervalMinutes = body?.intervalMinutes
+  if (
+    typeof intervalMinutes !== "number" ||
+    !Number.isInteger(intervalMinutes) ||
+    intervalMinutes < MIN_INTERVAL_MINUTES ||
+    intervalMinutes > MAX_INTERVAL_MINUTES
+  ) {
+    return c.json({ error: `intervalMinutes must be an integer between ${MIN_INTERVAL_MINUTES} and ${MAX_INTERVAL_MINUTES}` }, 400)
+  }
+
+  await setScrapeIntervalMinutes(c.env, intervalMinutes)
+  return c.json({ ok: true })
 })
 
 admin.patch("/users/:id/role", async (c) => {

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { adminApi, ApiError, type AdminStats, type AdminUser, type AdminApplication, type ApplicationStatus } from "../../api/client.js"
+import {
+  adminApi,
+  ApiError,
+  type AdminStats,
+  type AdminUser,
+  type AdminApplication,
+  type AdminSchedule,
+  type AdminScrapeQuery,
+  type ApplicationStatus,
+} from "../../api/client.js"
 import { useAuth } from "../../api/AuthContext.js"
 
 const STAT_LABELS: { key: keyof AdminStats; label: string }[] = [
@@ -11,6 +20,26 @@ const STAT_LABELS: { key: keyof AdminStats; label: string }[] = [
   { key: "documents", label: "Documents generated" },
   { key: "scrapeQueries", label: "Scrape queries" },
 ]
+
+// Cloudflare Cron Triggers are static config, so the effective interval an
+// admin picks here lives in D1 (scrape_schedule), not in a redeployed cron
+// expression -- see wrangler.toml's [triggers] comment and scheduled.ts.
+const INTERVAL_OPTIONS: { minutes: number; label: string }[] = [
+  { minutes: 15, label: "Every 15 minutes" },
+  { minutes: 30, label: "Every 30 minutes" },
+  { minutes: 60, label: "Every hour" },
+  { minutes: 120, label: "Every 2 hours" },
+  { minutes: 180, label: "Every 3 hours" },
+  { minutes: 360, label: "Every 6 hours" },
+  { minutes: 720, label: "Every 12 hours" },
+  { minutes: 1440, label: "Every day" },
+  { minutes: 2880, label: "Every 2 days" },
+  { minutes: 10080, label: "Every week" },
+]
+
+function formatTimestamp(value: string | null): string {
+  return value ? new Date(value).toLocaleString() : "Never"
+}
 
 function statusClass(status: ApplicationStatus): string {
   if (["hired", "offer"].includes(status)) return "strong"
@@ -25,6 +54,11 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [applications, setApplications] = useState<AdminApplication[] | null>(null)
+  const [schedule, setSchedule] = useState<AdminSchedule | null>(null)
+  const [scrapeQueries, setScrapeQueries] = useState<AdminScrapeQuery[] | null>(null)
+  const [intervalDraft, setIntervalDraft] = useState<number | null>(null)
+  const [scheduleSaving, setScheduleSaving] = useState(false)
+  const [scheduleError, setScheduleError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyUserId, setBusyUserId] = useState<string | null>(null)
   const [userQuery, setUserQuery] = useState("")
@@ -32,11 +66,14 @@ export default function AdminDashboard() {
 
   function load() {
     setError(null)
-    Promise.all([adminApi.stats(), adminApi.users(), adminApi.applications()])
-      .then(([statsRes, usersRes, applicationsRes]) => {
+    Promise.all([adminApi.stats(), adminApi.users(), adminApi.applications(), adminApi.schedule()])
+      .then(([statsRes, usersRes, applicationsRes, scheduleRes]) => {
         setStats(statsRes.stats)
         setUsers(usersRes.users)
         setApplications(applicationsRes.applications)
+        setSchedule(scheduleRes.schedule)
+        setScrapeQueries(scheduleRes.queries)
+        setIntervalDraft(scheduleRes.schedule.intervalMinutes)
       })
       .catch((err) => setError(err instanceof ApiError ? err.message : "Could not load admin data."))
   }
@@ -44,6 +81,20 @@ export default function AdminDashboard() {
   useEffect(() => {
     load()
   }, [])
+
+  async function saveSchedule() {
+    if (intervalDraft === null) return
+    setScheduleSaving(true)
+    setScheduleError(null)
+    try {
+      await adminApi.updateSchedule(intervalDraft)
+      setSchedule((prev) => (prev ? { ...prev, intervalMinutes: intervalDraft } : prev))
+    } catch (err) {
+      setScheduleError(err instanceof ApiError ? err.message : "Could not update the scrape schedule.")
+    } finally {
+      setScheduleSaving(false)
+    }
+  }
 
   async function toggleRole(u: AdminUser) {
     const nextRole = u.role === "admin" ? "user" : "admin"
@@ -102,6 +153,67 @@ export default function AdminDashboard() {
             <div className="label">{label}</div>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <div className="admin-section-head">
+          <h2>Scrape schedule</h2>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
+          How often the platform looks for new jobs. Cloudflare's cron trigger itself just ticks every 15 minutes;
+          this interval controls how many of those ticks actually run a scrape.
+        </p>
+        {!schedule && !error && <p className="muted">Loading…</p>}
+        {schedule && (
+          <>
+            <div className="admin-schedule-controls">
+              <select
+                value={intervalDraft ?? schedule.intervalMinutes}
+                onChange={(e) => setIntervalDraft(Number(e.target.value))}
+                disabled={scheduleSaving}
+              >
+                {INTERVAL_OPTIONS.map((opt) => (
+                  <option key={opt.minutes} value={opt.minutes}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                disabled={scheduleSaving || intervalDraft === schedule.intervalMinutes}
+                onClick={saveSchedule}
+              >
+                {scheduleSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+            {scheduleError && <p className="error-text">{scheduleError}</p>}
+            <p className="muted">
+              Last run: {formatTimestamp(schedule.lastRunAt)} · Next run: {formatTimestamp(schedule.nextRunAt)}
+            </p>
+            {scrapeQueries && scrapeQueries.length > 0 && (
+              <div className="table-scroll">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Portal</th>
+                      <th>Enabled</th>
+                      <th>Last ran</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scrapeQueries.map((q) => (
+                      <tr key={q.id}>
+                        <td>{q.portal}</td>
+                        <td>{q.enabled ? "Yes" : "No"}</td>
+                        <td className="muted">{formatTimestamp(q.lastRunAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div className="card">

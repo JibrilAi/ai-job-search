@@ -20,6 +20,15 @@ export async function markScrapeQueryRun(env: Env, id: string): Promise<void> {
   await env.DB.prepare(`UPDATE scrape_queries SET last_run_at = ? WHERE id = ?`).bind(new Date().toISOString(), id).run()
 }
 
+/** The admin-seeded global queries (owner_user_id IS NULL) -- the ones the schedule dashboard shows, not every user's personal search preferences. */
+export async function listGlobalScrapeQueries(env: Env): Promise<ScrapeQueryRow[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT id, portal, query_json as queryJson, enabled, last_run_at as lastRunAt
+     FROM scrape_queries WHERE owner_user_id IS NULL ORDER BY portal`,
+  ).all<ScrapeQueryRow>()
+  return results
+}
+
 export interface UserScrapeQueryRow extends ScrapeQueryRow {
   ownerUserId: string
 }

@@ -355,6 +355,14 @@ ul.plain li { padding: 4px 0; }
   max-width: 100%;
 }
 
+.admin-schedule-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
 .admin-user-cell { display: flex; align-items: center; gap: 10px; }
 
 .avatar-chip {
