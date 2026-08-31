@@ -57,7 +57,7 @@ describe("rankJob", () => {
       ],
     }
     const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-      expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-key")
+      expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=test-key")
       const body = JSON.parse(init.body as string)
       expect(body.generationConfig.responseMimeType).toBe("application/json")
       expect(body.generationConfig.responseSchema.required).toContain("scores")
