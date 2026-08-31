@@ -19,7 +19,7 @@ export async function suggestFieldValue(
   const systemPrompt = `You help fill in one field of a job-search candidate profile, for a job-search platform. Given the candidate's existing profile data (which may be partial or empty), suggest a good value for the requested field.
 - Only use information already present in the given profile -- never invent employers, dates, skills, achievements, or other facts not implied by the data.
 - If the profile doesn't contain enough information to confidently suggest a value for this field, return the current value unchanged (or an empty ${isList ? "array" : "string"} if it is currently empty) rather than guessing.
-- ${isList ? "Respond with a JSON array of short strings." : "Respond with a single JSON string."}`
+- Respond with a JSON object: {"value": ${isList ? "[...]" : '"..."'}}.`
 
   const userMessage = `Field to suggest: ${input.fieldLabel}
 Current value: ${JSON.stringify(input.currentValue)}
@@ -27,15 +27,28 @@ Current value: ${JSON.stringify(input.currentValue)}
 Candidate profile so far:
 ${JSON.stringify(input.profile, null, 2)}`
 
-  const responseSchema = isList ? { type: "ARRAY", items: { type: "STRING" } } : { type: "STRING" }
+  // OBJECT-shaped at the top level (not a bare STRING/ARRAY) for every
+  // provider, not just the ones that need it -- OpenRouter's free-model
+  // pool has uneven structured-output enforcement ("enforcement varies by
+  // provider: some guarantee schema-conforming output, others treat your
+  // schema as a strong hint"), and a {"value": ...} object is a far more
+  // commonly and reliably honored shape than a bare top-level scalar/array,
+  // which some free models were ignoring in favor of returning the raw
+  // value unwrapped.
+  const responseSchema = {
+    type: "OBJECT",
+    properties: { value: isList ? { type: "ARRAY", items: { type: "STRING" } } : { type: "STRING" } },
+    required: ["value"],
+  }
 
-  const result = await callLLM(env, {
+  const result = (await callLLM(env, {
     systemPrompt,
     userMessage,
     responseSchema,
     maxOutputTokens: 1024,
-  })
+  })) as { value?: unknown }
 
-  if (isList) return Array.isArray(result) ? result.filter((v): v is string => typeof v === "string") : []
-  return typeof result === "string" ? result : ""
+  const value = result?.value
+  if (isList) return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
+  return typeof value === "string" ? value : ""
 }

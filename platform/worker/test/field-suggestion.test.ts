@@ -102,9 +102,10 @@ describe("suggestFieldValue", () => {
   it("falls back to Gemini when OpenRouter fails", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("openrouter.ai")) return new Response("rate limited", { status: 429 })
-      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify("Backup Engineer") }] } }] }), {
-        status: 200,
-      })
+      return new Response(
+        JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify({ value: "Backup Engineer" }) }] } }] }),
+        { status: 200 },
+      )
     })
     vi.stubGlobal("fetch", fetchMock)
 

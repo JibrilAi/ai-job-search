@@ -2,7 +2,12 @@ import { describe, expect, it, vi, afterEach } from "vitest"
 import { callLLM } from "../src/lib/llmClient.js"
 import type { Env } from "../src/types.js"
 
-const ARGS = { systemPrompt: "sys", userMessage: "usr", responseSchema: { type: "STRING" }, maxOutputTokens: 128 }
+const ARGS = {
+  systemPrompt: "sys",
+  userMessage: "usr",
+  responseSchema: { type: "OBJECT", properties: { value: { type: "STRING" } }, required: ["value"] },
+  maxOutputTokens: 128,
+}
 const env = { OPENROUTER_API_KEY: "or-key", GEMINI_API_KEY: "gem-key" } as Env
 
 afterEach(() => {
@@ -19,7 +24,7 @@ describe("callLLM", () => {
 
     const result = await callLLM(env, ARGS)
 
-    expect(result).toBe("hi")
+    expect(result).toEqual({ value: "hi" })
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
