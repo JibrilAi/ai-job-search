@@ -3,7 +3,7 @@ import type { Env } from "../types.js"
 import { generateSalt, hashPassword, isPasswordStrongEnough, verifyPassword } from "../lib/auth/password.js"
 import { clearSessionCookie, createSession, deleteSession, getSessionFromRequest, sessionCookie } from "../lib/auth/session.js"
 import { consumeMagicLinkToken, issueMagicLinkToken, magicLinkUrl } from "../lib/auth/magicLink.js"
-import { sendMagicLinkEmail } from "../lib/auth/email.js"
+import { sendMagicLinkEmail, sendWelcomeEmail } from "../lib/auth/email.js"
 import { verifyTurnstile } from "../lib/auth/turnstile.js"
 import { createUser, findUserByEmail, findUserById, updatePassword } from "../lib/db/repositories/users.js"
 
@@ -34,6 +34,7 @@ auth.post("/signup", async (c) => {
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
+  c.executionCtx.waitUntil(sendWelcomeEmail(c.env, user.email).catch((err) => console.error("welcome email failed:", err)))
   return c.json({ user: { id: user.id, email: user.email, role: user.role } }, 201)
 })
 
@@ -77,7 +78,7 @@ auth.post("/magic-link", async (c) => {
   // Always respond 202 regardless of whether the account exists, so this
   // endpoint can't be used to enumerate registered emails.
   const token = await issueMagicLinkToken(c.env, email)
-  const url = magicLinkUrl(c.env.FRONTEND_ORIGIN, token)
+  const url = magicLinkUrl(c.env.APP_ORIGIN, token)
   await sendMagicLinkEmail(c.env, email, url)
   return c.json({ ok: true }, 202)
 })
@@ -90,14 +91,19 @@ auth.get("/verify", async (c) => {
   if (!email) return c.json({ error: "invalid or expired token" }, 401)
 
   let user = await findUserByEmail(c.env, email)
+  let isNewUser = false
   if (!user) {
     user = await createUser(c.env, { email, emailVerified: true })
+    isNewUser = true
   }
   const session = await createSession(c.env, user.id, {
     userAgent: c.req.header("User-Agent"),
     ip: c.req.header("CF-Connecting-IP"),
   })
   c.header("Set-Cookie", sessionCookie(session.id, isSecure(c)))
+  if (isNewUser) {
+    c.executionCtx.waitUntil(sendWelcomeEmail(c.env, user.email).catch((err) => console.error("welcome email failed:", err)))
+  }
   return c.json({ user: { id: user.id, email: user.email, role: user.role } })
 })
 
