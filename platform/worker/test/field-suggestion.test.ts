@@ -127,6 +127,23 @@ describe("suggestFieldValue", () => {
     expect(value).toEqual(["Fintech", "Climate tech"])
   })
 
+  it("logs a diagnostic warning naming the field when the model's value is empty", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ value: "" }) } }] }), { status: 200 })),
+    )
+    const value = await suggestFieldValue(env, {
+      fieldLabel: "Employment status",
+      fieldType: "string",
+      currentValue: "",
+      profile: emptyProfile,
+    })
+    expect(value).toBe("")
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("Employment status"))
+    warnSpy.mockRestore()
+  })
+
   it("falls back to Gemini when OpenRouter fails", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("openrouter.ai")) return new Response("rate limited", { status: 429 })
