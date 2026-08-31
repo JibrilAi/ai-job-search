@@ -1,9 +1,6 @@
 import type { Env } from "../../types.js"
 import type { ProfileInput } from "../db/repositories/profiles.js"
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-const ANTHROPIC_VERSION = "2023-06-01"
-const DEFAULT_MODEL = "claude-sonnet-5"
+import { callGemini } from "../geminiClient.js"
 
 // Resumes are short; this bounds token usage against a malformed or
 // unusually large PDF rather than truncating any real resume's content.
@@ -11,122 +8,118 @@ const MAX_RESUME_CHARS = 20_000
 
 const SYSTEM_PROMPT = `You extract a structured candidate profile from resume text, for prefilling a job-search profile form. Only include information explicitly present in the text -- never invent employers, dates, skills, or achievements. Leave a field empty (empty string, empty array, or null) when the resume doesn't state it. A resume rarely states things like target sectors, deal-breakers, or energizing/draining tasks -- leave those empty unless genuinely explicit.`
 
-const SUBMIT_PROFILE_TOOL = {
-  name: "submit_profile",
-  description: "Submit the structured candidate profile extracted from the resume.",
-  input_schema: {
-    type: "object",
-    properties: {
-      name: { type: ["string", "null"] },
-      city: { type: ["string", "null"] },
-      country: { type: ["string", "null"] },
-      commuteConstraints: { type: ["string", "null"] },
-      cvLanguage: { type: ["string", "null"] },
-      employmentStatus: { type: ["string", "null"] },
-      linkedinHeadline: { type: ["string", "null"] },
-      languages: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: { language: { type: "string" }, level: { type: "string" } },
-          required: ["language", "level"],
-        },
-      },
-      education: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            degree: { type: "string" },
-            field: { type: "string" },
-            yearStart: { type: "string" },
-            yearEnd: { type: "string" },
-            institution: { type: "string" },
-            thesis: { type: "string" },
-            topics: { type: "string" },
-          },
-          required: ["degree", "field", "institution"],
-        },
-      },
-      experience: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            startDate: { type: "string" },
-            endDate: { type: "string" },
-            company: { type: "string" },
-            location: { type: "string" },
-            bullets: { type: "array", items: { type: "string" } },
-          },
-          required: ["title", "company", "bullets"],
-        },
-      },
-      skills: {
-        type: "object",
-        properties: {
-          primary: { type: "array", items: { type: "string" } },
-          secondary: { type: "array", items: { type: "string" } },
-          domain: { type: "array", items: { type: "string" } },
-          software: { type: "array", items: { type: "string" } },
-        },
-        required: ["primary", "secondary", "domain", "software"],
-      },
-      certifications: { type: "array", items: { type: "string" } },
-      publications: { type: "array", items: { type: "string" } },
-      awards: { type: "array", items: { type: "string" } },
-      behavioral: {
-        type: "object",
-        properties: {
-          traits: { type: "array", items: { type: "string" } },
-          strengths: { type: "string" },
-          growthAreas: { type: "string" },
-          idealEnvironment: { type: "string" },
-        },
-        required: ["traits", "strengths", "growthAreas", "idealEnvironment"],
-      },
-      motivation: {
-        type: "object",
-        properties: {
-          energizingTasks: { type: "array", items: { type: "string" } },
-          drainingTasks: { type: "array", items: { type: "string" } },
-        },
-        required: ["energizingTasks", "drainingTasks"],
-      },
-      targetSectors: { type: "array", items: { type: "string" } },
-      dealbreakers: { type: "array", items: { type: "string" } },
-      eligibility: {
-        type: "object",
-        properties: {
-          citizenshipOrPr: { type: ["string", "null"] },
-          visaConstraintsNote: { type: ["string", "null"] },
-        },
-        required: ["citizenshipOrPr", "visaConstraintsNote"],
+const PROFILE_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    name: { type: "STRING", nullable: true },
+    city: { type: "STRING", nullable: true },
+    country: { type: "STRING", nullable: true },
+    commuteConstraints: { type: "STRING", nullable: true },
+    cvLanguage: { type: "STRING", nullable: true },
+    employmentStatus: { type: "STRING", nullable: true },
+    linkedinHeadline: { type: "STRING", nullable: true },
+    languages: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: { language: { type: "STRING" }, level: { type: "STRING" } },
+        required: ["language", "level"],
       },
     },
-    required: [
-      "name",
-      "city",
-      "country",
-      "commuteConstraints",
-      "cvLanguage",
-      "employmentStatus",
-      "linkedinHeadline",
-      "languages",
-      "education",
-      "experience",
-      "skills",
-      "certifications",
-      "publications",
-      "awards",
-      "behavioral",
-      "motivation",
-      "targetSectors",
-      "dealbreakers",
-      "eligibility",
-    ],
+    education: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          degree: { type: "STRING" },
+          field: { type: "STRING" },
+          yearStart: { type: "STRING" },
+          yearEnd: { type: "STRING" },
+          institution: { type: "STRING" },
+          thesis: { type: "STRING" },
+          topics: { type: "STRING" },
+        },
+        required: ["degree", "field", "institution"],
+      },
+    },
+    experience: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          title: { type: "STRING" },
+          startDate: { type: "STRING" },
+          endDate: { type: "STRING" },
+          company: { type: "STRING" },
+          location: { type: "STRING" },
+          bullets: { type: "ARRAY", items: { type: "STRING" } },
+        },
+        required: ["title", "company", "bullets"],
+      },
+    },
+    skills: {
+      type: "OBJECT",
+      properties: {
+        primary: { type: "ARRAY", items: { type: "STRING" } },
+        secondary: { type: "ARRAY", items: { type: "STRING" } },
+        domain: { type: "ARRAY", items: { type: "STRING" } },
+        software: { type: "ARRAY", items: { type: "STRING" } },
+      },
+      required: ["primary", "secondary", "domain", "software"],
+    },
+    certifications: { type: "ARRAY", items: { type: "STRING" } },
+    publications: { type: "ARRAY", items: { type: "STRING" } },
+    awards: { type: "ARRAY", items: { type: "STRING" } },
+    behavioral: {
+      type: "OBJECT",
+      properties: {
+        traits: { type: "ARRAY", items: { type: "STRING" } },
+        strengths: { type: "STRING" },
+        growthAreas: { type: "STRING" },
+        idealEnvironment: { type: "STRING" },
+      },
+      required: ["traits", "strengths", "growthAreas", "idealEnvironment"],
+    },
+    motivation: {
+      type: "OBJECT",
+      properties: {
+        energizingTasks: { type: "ARRAY", items: { type: "STRING" } },
+        drainingTasks: { type: "ARRAY", items: { type: "STRING" } },
+      },
+      required: ["energizingTasks", "drainingTasks"],
+    },
+    targetSectors: { type: "ARRAY", items: { type: "STRING" } },
+    dealbreakers: { type: "ARRAY", items: { type: "STRING" } },
+    eligibility: {
+      type: "OBJECT",
+      properties: {
+        citizenshipOrPr: { type: "STRING", nullable: true },
+        visaConstraintsNote: { type: "STRING", nullable: true },
+      },
+      required: ["citizenshipOrPr", "visaConstraintsNote"],
+    },
   },
+  required: [
+    "name",
+    "city",
+    "country",
+    "commuteConstraints",
+    "cvLanguage",
+    "employmentStatus",
+    "linkedinHeadline",
+    "languages",
+    "education",
+    "experience",
+    "skills",
+    "certifications",
+    "publications",
+    "awards",
+    "behavioral",
+    "motivation",
+    "targetSectors",
+    "dealbreakers",
+    "eligibility",
+  ],
 }
 
 function str(v: unknown): string {
@@ -139,7 +132,7 @@ function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []
 }
 
-/** Defensive normalization of Claude's tool_use.input into a well-formed ProfileInput, tolerating a field the model omitted despite the schema. */
+/** Defensive normalization of Gemini's response into a well-formed ProfileInput, tolerating a field the model omitted despite the schema. */
 export function normalizeExtractedProfile(value: unknown): ProfileInput {
   const v = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>
   const skills = (typeof v.skills === "object" && v.skills !== null ? v.skills : {}) as Record<string, unknown>
@@ -220,31 +213,12 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
 export async function extractProfileFromResumeText(env: Env, resumeText: string): Promise<ProfileInput> {
   const text = resumeText.slice(0, MAX_RESUME_CHARS)
 
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: `Resume text:\n\n${text}` }],
-      tools: [SUBMIT_PROFILE_TOOL],
-      tool_choice: { type: "tool", name: "submit_profile" },
-    }),
+  const result = await callGemini(env, {
+    systemPrompt: SYSTEM_PROMPT,
+    userMessage: `Resume text:\n\n${text}`,
+    responseSchema: PROFILE_RESPONSE_SCHEMA,
+    maxOutputTokens: 4096,
   })
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "")
-    throw new Error(`Anthropic API request failed: ${response.status} ${body}`)
-  }
-
-  const data = (await response.json()) as { content: Array<{ type: string; name?: string; input?: unknown }> }
-  const toolUse = data.content.find((block) => block.type === "tool_use" && block.name === "submit_profile")
-  if (!toolUse) throw new Error("Claude did not return a submit_profile tool call")
-
-  return normalizeExtractedProfile(toolUse.input)
+  return normalizeExtractedProfile(result)
 }

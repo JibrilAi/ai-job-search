@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest"
-import { rankJobWithClaude } from "../src/lib/ranking/claudeClient.js"
+import { rankJob } from "../src/lib/ranking/geminiClient.js"
 import type { Env } from "../src/types.js"
 import type { Profile } from "../src/lib/db/repositories/profiles.js"
 
@@ -33,37 +33,41 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe("rankJobWithClaude", () => {
-  it("sends a forced tool-use request and parses the tool_use response", async () => {
+describe("rankJob", () => {
+  it("sends a structured-output request and parses the JSON response", async () => {
     const mockResponseBody = {
-      content: [
+      candidates: [
         {
-          type: "tool_use",
-          name: "submit_ranking",
-          input: {
-            scores: { technical: 80, experience: 70, behavioral: 60, career: 85 },
-            location_verdict: "PASS",
-            language_gate: "PASS",
-            language_note: null,
-            eligibility_verdict: "PASS",
-            strengths: ["Strong Python background"],
-            gaps: ["Limited fintech experience"],
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  scores: { technical: 80, experience: 70, behavioral: 60, career: 85 },
+                  location_verdict: "PASS",
+                  language_gate: "PASS",
+                  language_note: null,
+                  eligibility_verdict: "PASS",
+                  strengths: ["Strong Python background"],
+                  gaps: ["Limited fintech experience"],
+                }),
+              },
+            ],
           },
         },
       ],
     }
     const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-      expect(url).toBe("https://api.anthropic.com/v1/messages")
+      expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=test-key")
       const body = JSON.parse(init.body as string)
-      expect(body.tool_choice).toEqual({ type: "tool", name: "submit_ranking" })
-      expect(body.system[0].cache_control).toEqual({ type: "ephemeral" })
-      expect(body.messages[0].content).toContain("Senior Engineer")
+      expect(body.generationConfig.responseMimeType).toBe("application/json")
+      expect(body.generationConfig.responseSchema.required).toContain("scores")
+      expect(body.contents[0].parts[0].text).toContain("Senior Engineer")
       return new Response(JSON.stringify(mockResponseBody), { status: 200 })
     })
     vi.stubGlobal("fetch", fetchMock)
 
-    const env = { ANTHROPIC_API_KEY: "test-key" } as Env
-    const result = await rankJobWithClaude(env, {
+    const env = { GEMINI_API_KEY: "test-key" } as Env
+    const result = await rankJob(env, {
       job: { title: "Senior Engineer", company: "Acme", location: "Copenhagen", description: "Build things." },
       profile: fakeProfile,
     })
@@ -73,25 +77,22 @@ describe("rankJobWithClaude", () => {
     expect(result.location_verdict).toBe("PASS")
   })
 
-  it("throws when Claude does not return a submit_ranking tool call", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ content: [{ type: "text", text: "no tool call" }] }), { status: 200 })),
-    )
-    const env = { ANTHROPIC_API_KEY: "test-key" } as Env
+  it("throws when Gemini does not return a response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ candidates: [] }), { status: 200 })))
+    const env = { GEMINI_API_KEY: "test-key" } as Env
     await expect(
-      rankJobWithClaude(env, {
+      rankJob(env, {
         job: { title: "x", company: "y", location: null, description: null },
         profile: fakeProfile,
       }),
-    ).rejects.toThrow(/submit_ranking/)
+    ).rejects.toThrow(/did not return a response/)
   })
 
   it("throws on a non-2xx response", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })))
-    const env = { ANTHROPIC_API_KEY: "bad-key" } as Env
+    const env = { GEMINI_API_KEY: "bad-key" } as Env
     await expect(
-      rankJobWithClaude(env, {
+      rankJob(env, {
         job: { title: "x", company: "y", location: null, description: null },
         profile: fakeProfile,
       }),

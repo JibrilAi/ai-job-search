@@ -1,33 +1,26 @@
 import type { Env } from "../../types.js"
 import type { JobRow } from "../db/repositories/jobs.js"
 import type { Profile } from "../db/repositories/profiles.js"
-
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-const ANTHROPIC_VERSION = "2023-06-01"
-const DEFAULT_MODEL = "claude-sonnet-5"
+import { callGemini } from "../geminiClient.js"
 
 export interface CvTailoring {
   profileStatement: string
   emphasizedSkills: string[]
 }
 
-const SUBMIT_TAILORING_TOOL = {
-  name: "submit_cv_tailoring",
-  description: "Submit the CV tailoring for this specific job posting.",
-  input_schema: {
-    type: "object",
-    properties: {
-      profileStatement: { type: "string" },
-      emphasizedSkills: { type: "array", items: { type: "string" } },
-    },
-    required: ["profileStatement", "emphasizedSkills"],
+const TAILORING_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    profileStatement: { type: "STRING" },
+    emphasizedSkills: { type: "ARRAY", items: { type: "STRING" } },
   },
+  required: ["profileStatement", "emphasizedSkills"],
 }
 
 const SYSTEM_PROMPT = `You tailor a candidate's CV opening for one specific job posting, for a job-search platform.
 - profileStatement: 2-3 sentences, third-person-free (no "I"/"the candidate"), summarizing fit for THIS role. Ground every claim only in the candidate's actual listed experience and skills -- never invent employers, titles, technologies, or achievements not given to you.
 - emphasizedSkills: 4-8 skills to lead with on the CV, chosen ONLY from the candidate's own listed skills (primary/secondary/domain/software), ordered by relevance to this posting's requirements. Do not include a skill that isn't in the candidate's list.
-Call the submit_cv_tailoring tool with your result.`
+Respond as JSON matching the required schema.`
 
 function buildUserMessage(job: Pick<JobRow, "title" | "company" | "description">, profile: Profile): string {
   const allSkills = [...profile.skills.primary, ...profile.skills.secondary, ...profile.skills.domain, ...profile.skills.software]
@@ -67,35 +60,18 @@ export async function draftCvTailoring(
   env: Env,
   input: { job: Pick<JobRow, "title" | "company" | "description">; profile: Profile },
 ): Promise<CvTailoring> {
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: DEFAULT_MODEL,
-      max_tokens: 512,
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: buildUserMessage(input.job, input.profile) }],
-      tools: [SUBMIT_TAILORING_TOOL],
-      tool_choice: { type: "tool", name: "submit_cv_tailoring" },
-    }),
-  })
+  const result = (await callGemini(env, {
+    systemPrompt: SYSTEM_PROMPT,
+    userMessage: buildUserMessage(input.job, input.profile),
+    responseSchema: TAILORING_RESPONSE_SCHEMA,
+    maxOutputTokens: 512,
+  })) as { profileStatement?: unknown; emphasizedSkills?: unknown }
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "")
-    throw new Error(`Anthropic API request failed: ${response.status} ${body}`)
-  }
-
-  const data = (await response.json()) as { content: Array<{ type: string; name?: string; input?: unknown }> }
-  const toolUse = data.content.find((block) => block.type === "tool_use" && block.name === "submit_cv_tailoring")
-  if (!toolUse) throw new Error("Claude did not return a submit_cv_tailoring tool call")
-
-  const raw = toolUse.input as { profileStatement?: unknown; emphasizedSkills?: unknown }
   return {
-    profileStatement: typeof raw.profileStatement === "string" ? raw.profileStatement : "",
-    emphasizedSkills: keepOwnedSkills(Array.isArray(raw.emphasizedSkills) ? raw.emphasizedSkills.filter((s): s is string => typeof s === "string") : [], input.profile),
+    profileStatement: typeof result.profileStatement === "string" ? result.profileStatement : "",
+    emphasizedSkills: keepOwnedSkills(
+      Array.isArray(result.emphasizedSkills) ? result.emphasizedSkills.filter((s): s is string => typeof s === "string") : [],
+      input.profile,
+    ),
   }
 }

@@ -15,7 +15,7 @@ export interface Env {
   // FRONTEND_ORIGIN, which can hold multiple comma-separated origins.
   APP_ORIGIN: string
 
-  ANTHROPIC_API_KEY: string
+  GEMINI_API_KEY: string
   SESSION_SECRET: string
   MAGIC_LINK_SECRET: string
   RESEND_API_KEY?: string
