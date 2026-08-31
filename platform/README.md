@@ -13,7 +13,7 @@ app that lives alongside the existing local Claude Code skills (`.claude/`,
   PDF generation via Browser Rendering.
 - `frontend/` -- a React + Vite app (deploys to Cloudflare Pages): auth,
   profile setup, job feed/detail, document studio, application tracker.
-- `migrations/` -- D1 schema, applied in order (`0001`..`0005`).
+- `migrations/` -- D1 schema, applied in order.
 - `docs/` -- architecture notes and the local-data-to-D1 migration mapping.
 
 ## Status
@@ -121,8 +121,14 @@ npm run deploy:frontend    # vite build + wrangler pages deploy (frontend/)
 
 Requires the D1/KV/R2/Queues resources referenced in `worker/wrangler.toml`
 to exist in your Cloudflare account first (see the setup comment at the top
-of that file), and `npm run db:migrate:remote` to apply migrations to the
-production D1 database.
+of that file). Pushing to `master` (touching `worker/**` or `migrations/**`)
+auto-deploys the Worker via `.github/workflows/deploy-worker.yml`, which
+applies any new D1 migrations to the production database before deploying
+the new code -- `npm run db:migrate:remote` is only for running one by hand
+outside that flow (e.g. testing a migration against prod before merging).
+The frontend (Pages) isn't wired into that workflow -- `npm run
+deploy:frontend` remains a manual step unless the Pages project has its own
+git-integration auto-deploy configured in the Cloudflare dashboard.
 
 ## Known limitations / open risks
 

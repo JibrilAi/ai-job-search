@@ -1,21 +1,25 @@
 name: Deploy platform Worker
 
-# Manually-triggered deploy of platform/worker to Cloudflare, run from
-# GitHub's own runners (which have real internet access to the Cloudflare
-# API, unlike a sandboxed dev environment). Requires a CLOUDFLARE_API_TOKEN
-# repository secret (Settings -> Secrets and variables -> Actions -> New
-# repository secret) with Workers Scripts:Edit permission at minimum.
+# Deploys platform/worker to Cloudflare and applies any new D1 migrations,
+# run from GitHub's own runners (which have real internet access to the
+# Cloudflare API, unlike a sandboxed dev environment). Requires a
+# CLOUDFLARE_API_TOKEN repository secret (Settings -> Secrets and variables
+# -> Actions -> New repository secret) with Workers Scripts:Edit AND D1:Edit
+# permission -- D1:Edit is required for the migration step below; without it
+# that step fails with an auth/permission error while the deploy step still
+# succeeds, which is exactly the kind of silent schema/code drift this step
+# exists to prevent (see the migration-apply step's comment).
 #
-# D1/KV/R2 resources, the D1 schema, and the ANTHROPIC_API_KEY/
-# SESSION_SECRET/MAGIC_LINK_SECRET Worker secrets are provisioned
-# separately (see platform/worker/wrangler.toml's setup comment and
-# platform/README.md) -- this workflow only pushes the Worker script itself.
+# D1/KV/R2 resources and the ANTHROPIC_API_KEY/SESSION_SECRET/
+# MAGIC_LINK_SECRET Worker secrets are provisioned separately (see
+# platform/worker/wrangler.toml's setup comment and platform/README.md).
 on:
   workflow_dispatch: {}
   push:
     branches: [master]
     paths:
       - "platform/worker/**"
+      - "platform/migrations/**"
       - ".github/workflows/deploy-worker.yml"
 
 jobs:
@@ -33,6 +37,20 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      # Runs before the deploy step below so the schema a new Worker version
+      # expects is already there before that code goes live -- the reverse
+      # order is what caused a real outage: a migration adding a column
+      # landed in code and got deployed, but nothing ever applied it to the
+      # remote database (this step didn't exist yet), so every request
+      # touching that column 500'd until it was applied by hand.
+      # `wrangler d1 migrations apply` only runs files not already recorded
+      # in the remote d1_migrations table, so this is safe to run on every
+      # deploy even when there's nothing new.
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply ai_job_search_db --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
