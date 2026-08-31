@@ -1,7 +1,7 @@
 import type { Env } from "../../types.js"
 import type { JobRow } from "../db/repositories/jobs.js"
 import type { Profile } from "../db/repositories/profiles.js"
-import { callGemini } from "../geminiClient.js"
+import { callLLM } from "../llmClient.js"
 
 export interface CvTailoring {
   profileStatement: string
@@ -60,7 +60,7 @@ export async function draftCvTailoring(
   env: Env,
   input: { job: Pick<JobRow, "title" | "company" | "description">; profile: Profile },
 ): Promise<CvTailoring> {
-  const result = (await callGemini(env, {
+  const result = (await callLLM(env, {
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(input.job, input.profile),
     responseSchema: TAILORING_RESPONSE_SCHEMA,

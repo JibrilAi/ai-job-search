@@ -10,6 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 #   wrangler r2 bucket create ai-job-search-documents
 #   wrangler queues create scrape-portal-queue
 #   wrangler queues create rank-job-queue
+#   wrangler secret put OPENROUTER_API_KEY
 #   wrangler secret put GEMINI_API_KEY
 #   wrangler secret put SESSION_SECRET
 #   wrangler secret put MAGIC_LINK_SECRET
@@ -86,7 +87,7 @@ APP_ORIGIN = "https://inhr.ca"
 RESEND_FROM_EMAIL = "AI Job Search <hello@inhr.ca>"
 
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
-#   GEMINI_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY,
+#   OPENROUTER_API_KEY, GEMINI_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY,
 #   TURNSTILE_SECRET_KEY
 #
 # TURNSTILE_SECRET_KEY pairs with the frontend's VITE_TURNSTILE_SITE_KEY

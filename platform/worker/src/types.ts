@@ -15,6 +15,8 @@ export interface Env {
   // FRONTEND_ORIGIN, which can hold multiple comma-separated origins.
   APP_ORIGIN: string
 
+  // Primary LLM provider (free-model router). Gemini below is the fallback.
+  OPENROUTER_API_KEY: string
   GEMINI_API_KEY: string
   SESSION_SECRET: string
   MAGIC_LINK_SECRET: string

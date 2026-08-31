@@ -1,6 +1,6 @@
 import type { Env } from "../../types.js"
 import type { ProfileInput } from "../db/repositories/profiles.js"
-import { callGemini } from "../geminiClient.js"
+import { callLLM } from "../llmClient.js"
 
 export type FieldType = "string" | "string[]"
 
@@ -29,7 +29,7 @@ ${JSON.stringify(input.profile, null, 2)}`
 
   const responseSchema = isList ? { type: "ARRAY", items: { type: "STRING" } } : { type: "STRING" }
 
-  const result = await callGemini(env, {
+  const result = await callLLM(env, {
     systemPrompt,
     userMessage,
     responseSchema,

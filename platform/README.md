@@ -35,17 +35,18 @@ typechecked:
   behavior all confirmed); the actual freehire.me HTTP call could not be
   exercised from this sandbox (its network policy blocks that domain) -- see
   Known limitations. LinkedIn and the Danish portals are not ported yet.
-- **AI ranking** -- reproduces `04-job-evaluation.md`'s rubric, calls the
-  Gemini API directly with forced structured JSON output
-  (`responseSchema`/`responseMimeType`), fans out per (user, job) via a
-  queue, writes weighted scores/verdicts/gate results to
-  `user_job_rankings`. The request was verified to reach the real Gemini API
-  correctly (a placeholder key returns a genuine authentication error,
-  proving the request shape and endpoint are right) and against a fully
-  mocked response in `worker/test/gemini-client.test.ts`. Do a real ranking
-  with a valid `GEMINI_API_KEY` (free at
-  [aistudio.google.com/apikey](https://aistudio.google.com/apikey)) before
-  trusting ranking quality.
+- **AI ranking** -- reproduces `04-job-evaluation.md`'s rubric with forced
+  structured JSON output, fans out per (user, job) via a queue, writes
+  weighted scores/verdicts/gate results to `user_job_rankings`. Calls
+  OpenRouter's free-model router (`openrouter/free`) as the primary LLM
+  provider, falling back to Gemini automatically (`lib/llmClient.ts`) if
+  OpenRouter fails -- see `docs/architecture.md` for why. Verified against a
+  fully mocked response in `worker/test/llm-client.test.ts`,
+  `worker/test/openrouter-client.test.ts`, and `worker/test/gemini-client.test.ts`.
+  Do a real ranking with valid `OPENROUTER_API_KEY` (free at
+  [openrouter.ai/keys](https://openrouter.ai/keys)) and `GEMINI_API_KEY`
+  (free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey))
+  before trusting ranking quality.
 - **Dashboard** -- React job feed (ranked, badge-annotated) and job detail
   (score breakdown, strengths/gaps, gate explanations, manual re-rank).
   Verified visually with seeded ranking data through a real browser session.
@@ -57,7 +58,7 @@ typechecked:
   real CV PDF was generated end-to-end (headless Chrome -> PDF -> R2 ->
   downloaded -> visually inspected -> text layer confirmed selectable, 0
   ATS warnings). See "How the PDF pipeline was actually verified" below for
-  the two real bugs this caught. Cover-letter drafting (a Gemini call)
+  the two real bugs this caught. Cover-letter drafting (an LLM call)
   verified the same way ranking was -- reaches the real API, fails cleanly
   on a placeholder key.
 - **Application tracker** -- CRUD + status transitions following
@@ -99,7 +100,7 @@ npm install                              # installs both workspaces
 # One-time: create real Cloudflare resources and paste their IDs into
 # worker/wrangler.toml (see the comment block at the top of that file),
 # then set local secrets:
-cp worker/.dev.vars.example worker/.dev.vars   # fill in a real GEMINI_API_KEY etc.
+cp worker/.dev.vars.example worker/.dev.vars   # fill in real OPENROUTER_API_KEY, GEMINI_API_KEY, etc.
 
 npm run db:migrate:local                 # applies migrations/*.sql to local D1
 npm run dev:worker                       # wrangler dev, http://localhost:8787
