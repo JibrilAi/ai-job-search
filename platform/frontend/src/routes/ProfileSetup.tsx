@@ -87,6 +87,21 @@ export default function ProfileSetup() {
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
 
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searchLocation, setSearchLocation] = useState("")
+  const [searchSuggestion, setSearchSuggestion] = useState<{ query: string; location: string | null } | null>(null)
+  const [searchSaving, setSearchSaving] = useState(false)
+  const [searchSaved, setSearchSaved] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  function loadSearchPreferences() {
+    profileApi.searchPreferences().then(({ suggestion, saved: savedPrefs }) => {
+      setSearchSuggestion(suggestion)
+      setSearchQuery(savedPrefs?.query ?? suggestion.query)
+      setSearchLocation(savedPrefs?.location ?? suggestion.location ?? "")
+    })
+  }
+
   useEffect(() => {
     profileApi
       .get()
@@ -97,7 +112,28 @@ export default function ProfileSetup() {
         }
       })
       .finally(() => setLoading(false))
+    loadSearchPreferences()
   }, [])
+
+  async function handleSaveSearchPreferences() {
+    setSearchSaving(true)
+    setSearchError(null)
+    setSearchSaved(false)
+    try {
+      await profileApi.saveSearchPreferences(searchQuery.trim(), searchLocation.trim() || null)
+      setSearchSaved(true)
+    } catch (err) {
+      setSearchError(err instanceof ApiError ? err.message : "Could not save your search preferences.")
+    } finally {
+      setSearchSaving(false)
+    }
+  }
+
+  function resetSearchToSuggestion() {
+    if (!searchSuggestion) return
+    setSearchQuery(searchSuggestion.query)
+    setSearchLocation(searchSuggestion.location ?? "")
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -478,6 +514,35 @@ export default function ProfileSetup() {
           {saving ? "Saving…" : "Save profile"}
         </button>
       </form>
+
+      <div className="card">
+        <h3>Search preferences</h3>
+        <p className="muted">
+          Suggested from your skills, domain expertise, and target sectors -- edit before saving. Without this, the
+          shared job pool only reflects a couple of broad, untargeted default searches, which may have little to do
+          with your actual field.
+        </p>
+        <div className="form-row">
+          <label>Search keywords</label>
+          <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="e.g. Entrepreneurship, Aviation, Finance" />
+        </div>
+        <div className="form-row">
+          <label>Location (blank searches everywhere)</label>
+          <input value={searchLocation} onChange={(e) => setSearchLocation(e.target.value)} placeholder="e.g. Toronto, Ontario, Canada" />
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button type="button" onClick={handleSaveSearchPreferences} disabled={searchSaving}>
+            {searchSaving ? "Saving…" : "Save search preferences"}
+          </button>
+          {searchSuggestion && (
+            <button type="button" className="secondary" onClick={resetSearchToSuggestion}>
+              Reset to suggestion
+            </button>
+          )}
+        </div>
+        {searchError && <p className="error-text">{searchError}</p>}
+        {searchSaved && <p style={{ color: "var(--good)" }}>Search preferences saved.</p>}
+      </div>
     </div>
   )
 }
