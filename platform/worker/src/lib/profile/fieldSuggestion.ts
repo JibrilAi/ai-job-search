@@ -41,14 +41,24 @@ ${JSON.stringify(input.profile, null, 2)}`
     required: ["value"],
   }
 
-  const result = (await callLLM(env, {
+  const result = await callLLM(env, {
     systemPrompt,
     userMessage,
     responseSchema,
     maxOutputTokens: 1024,
-  })) as { value?: unknown }
+  })
 
-  const value = result?.value
+  // We always ask for {"value": ...}, but OpenRouter's free-model pool
+  // enforces response_format unevenly -- a model can ignore the wrapper
+  // and answer with the bare value instead (a string/array directly,
+  // rather than {value: ...}). Unwrap when the wrapper is honored, but
+  // fall back to treating the raw result as the value itself rather than
+  // silently defaulting to empty when it isn't.
+  const value =
+    result && typeof result === "object" && !Array.isArray(result) && "value" in result
+      ? (result as { value: unknown }).value
+      : result
+
   if (isList) return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []
   return typeof value === "string" ? value : ""
 }

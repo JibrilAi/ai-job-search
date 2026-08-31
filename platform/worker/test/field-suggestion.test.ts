@@ -99,6 +99,34 @@ describe("suggestFieldValue", () => {
     expect(value).toEqual(["ok"])
   })
 
+  it("returns the bare string when the model ignores the {value} wrapper", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify("Data Engineer | Python") } }] }), { status: 200 })),
+    )
+    const value = await suggestFieldValue(env, {
+      fieldLabel: "LinkedIn headline",
+      fieldType: "string",
+      currentValue: "",
+      profile: emptyProfile,
+    })
+    expect(value).toBe("Data Engineer | Python")
+  })
+
+  it("returns the bare array when the model ignores the {value} wrapper for a list field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(["Fintech", "Climate tech"]) } }] }), { status: 200 })),
+    )
+    const value = await suggestFieldValue(env, {
+      fieldLabel: "Target sectors",
+      fieldType: "string[]",
+      currentValue: [],
+      profile: emptyProfile,
+    })
+    expect(value).toEqual(["Fintech", "Climate tech"])
+  })
+
   it("falls back to Gemini when OpenRouter fails", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.includes("openrouter.ai")) return new Response("rate limited", { status: 429 })
