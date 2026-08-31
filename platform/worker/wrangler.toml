@@ -69,6 +69,22 @@ ENVIRONMENT = "production"
 # "Something went wrong" (see client.ts's request()).
 FRONTEND_ORIGIN = "https://inhr.ca,https://www.inhr.ca,https://ai-job-search-2hg.pages.dev"
 
+# The single canonical frontend URL used to build links inside emails
+# (magic link, welcome email). Deliberately separate from FRONTEND_ORIGIN
+# above (which can list multiple CORS-allowed origins) -- do NOT put a
+# comma-separated list here, it goes straight into an href.
+APP_ORIGIN = "https://inhr.ca"
+
+# The "Name <local@yourdomain>" sender address for magic-link and welcome
+# emails. Must be on a domain verified in the Resend account that owns
+# RESEND_API_KEY (Resend rejects sends from unverified domains) -- inhr.ca
+# is verified, so this works as-is. Without this var, sends fall back to
+# Resend's shared sandbox sender, which Resend restricts to only the
+# account's own address -- any send to a real user then fails with a 403
+# ("You can only send testing emails to your own email address") and never
+# reaches its recipient.
+RESEND_FROM_EMAIL = "AI Job Search <hello@inhr.ca>"
+
 # Secrets (set via `wrangler secret put <NAME>`, never committed here):
 #   ANTHROPIC_API_KEY, SESSION_SECRET, MAGIC_LINK_SECRET, RESEND_API_KEY,
 #   TURNSTILE_SECRET_KEY
@@ -80,9 +96,3 @@ FRONTEND_ORIGIN = "https://inhr.ca,https://www.inhr.ca,https://ai-job-search-2hg
 # To make the first admin: sign up normally, then run
 #   wrangler d1 execute ai_job_search_db --remote \
 #     --command "UPDATE users SET role='admin' WHERE email='you@example.com'"
-#
-# RESEND_FROM_EMAIL (optional [vars] entry, not a secret): the "Name <local@
-# yourdomain>" sender address for magic-link emails. Must be on a domain
-# verified in the Resend account that owns RESEND_API_KEY -- Resend rejects
-# sends from unverified domains. Without it, sends fall back to Resend's
-# shared sandbox sender, which only delivers to the account's own address.
