@@ -55,29 +55,19 @@ describe("callOpenRouter", () => {
     expect(result).toEqual({ technical: 80, note: null, tags: ["a"] })
   })
 
-  it("wraps a non-object top-level schema in {value} for the request and unwraps the response", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
-      const body = JSON.parse(init.body as string)
-      expect(body.response_format.json_schema.schema).toEqual({
-        type: "object",
-        properties: { value: { type: "array", items: { type: "string" } } },
-        required: ["value"],
-        additionalProperties: false,
-      })
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ value: ["Fintech", "Climate"] }) } }] }), {
-        status: 200,
-      })
-    })
+  it("throws when given a non-OBJECT top-level schema", async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal("fetch", fetchMock)
 
-    const result = await callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
-      systemPrompt: "sys",
-      userMessage: "usr",
-      responseSchema: { type: "ARRAY", items: { type: "STRING" } },
-      maxOutputTokens: 512,
-    })
-
-    expect(result).toEqual(["Fintech", "Climate"])
+    await expect(
+      callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
+        systemPrompt: "sys",
+        userMessage: "usr",
+        responseSchema: { type: "ARRAY", items: { type: "STRING" } },
+        maxOutputTokens: 512,
+      }),
+    ).rejects.toThrow(/OBJECT-shaped/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("throws on a non-2xx response", async () => {
@@ -86,7 +76,7 @@ describe("callOpenRouter", () => {
       callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
         systemPrompt: "sys",
         userMessage: "usr",
-        responseSchema: { type: "STRING" },
+        responseSchema: { type: "OBJECT", properties: { value: { type: "STRING" } }, required: ["value"] },
         maxOutputTokens: 512,
       }),
     ).rejects.toThrow(/402/)
@@ -98,7 +88,7 @@ describe("callOpenRouter", () => {
       callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
         systemPrompt: "sys",
         userMessage: "usr",
-        responseSchema: { type: "STRING" },
+        responseSchema: { type: "OBJECT", properties: { value: { type: "STRING" } }, required: ["value"] },
         maxOutputTokens: 512,
       }),
     ).rejects.toThrow(/did not return a response/)

@@ -42,21 +42,24 @@ function toJsonSchema(schema: JsonSchema): Record<string, unknown> {
 }
 
 /**
- * OpenRouter/OpenAI-style structured output requires an object at the JSON
- * Schema root (unlike Gemini, which accepts a bare string/array there) --
- * wrap a non-object top-level schema in {value: ...} for the request and
- * unwrap it back out of the parsed response, so callers see the same
- * return shape as callGemini either way.
+ * Every call site's schema is OBJECT-shaped at the top level -- OpenAI/
+ * OpenRouter-style structured output requires an object at the JSON Schema
+ * root anyway (unlike Gemini, which also accepts a bare string/array
+ * there), and an object root is also the shape free models on OpenRouter
+ * most reliably honor: enforcement varies by provider on that pool, and a
+ * bare top-level scalar/array schema was observed being silently ignored
+ * by some of them (they returned the raw value unwrapped instead).
  */
 export async function callOpenRouter(
   env: Env,
   args: { systemPrompt: string; userMessage: string; responseSchema: object; maxOutputTokens: number },
 ): Promise<unknown> {
   const responseSchema = args.responseSchema as JsonSchema
-  const isWrapped = responseSchema.type !== "OBJECT"
-  const schemaForRequest: JsonSchema = isWrapped
-    ? { type: "OBJECT", properties: { value: responseSchema } }
-    : responseSchema
+  if (responseSchema.type !== "OBJECT") {
+    throw new Error(
+      `callOpenRouter requires an OBJECT-shaped top-level schema (got "${responseSchema.type}") -- some free models on OpenRouter don't reliably honor a bare scalar/array root, wrap it in an object property instead`,
+    )
+  }
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
@@ -73,7 +76,7 @@ export async function callOpenRouter(
       ],
       response_format: {
         type: "json_schema",
-        json_schema: { name: "response", strict: true, schema: toJsonSchema(schemaForRequest) },
+        json_schema: { name: "response", strict: true, schema: toJsonSchema(responseSchema) },
       },
     }),
   })
@@ -87,6 +90,5 @@ export async function callOpenRouter(
   const text = data.choices?.[0]?.message?.content
   if (!text) throw new Error("OpenRouter did not return a response")
 
-  const parsed = JSON.parse(text) as unknown
-  return isWrapped ? (parsed as { value: unknown }).value : parsed
+  return JSON.parse(text) as unknown
 }
