@@ -3,6 +3,7 @@ import { Link } from "react-router-dom"
 import { rankingsApi, applicationsApi, profileApi, ApiError, type RankedJobFeedRow, type Application, type Profile } from "../api/client.js"
 
 const ACTIVE_STATUSES = new Set(["drafted", "applied", "interview", "offer"])
+const PAGE_SIZE = 20
 
 function verdictClass(verdict: string | null): string {
   if (!verdict) return ""
@@ -26,9 +27,11 @@ export default function JobFeed() {
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [includeVetoed, setIncludeVetoed] = useState(false)
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
 
   useEffect(() => {
     setRows(null)
+    setVisibleCount(PAGE_SIZE)
     rankingsApi
       .feed(includeVetoed)
       .then(({ rankings }) => setRows(rankings))
@@ -96,7 +99,7 @@ export default function JobFeed() {
       )}
 
       <div className="job-list">
-        {rows?.map((row) => (
+        {rows?.slice(0, visibleCount).map((row) => (
           <Link className="job-row" to={`/jobs/${row.jobId}`} key={row.jobId}>
             <div>
               <div>
@@ -124,6 +127,14 @@ export default function JobFeed() {
           </Link>
         ))}
       </div>
+
+      {rows && visibleCount < rows.length && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button type="button" className="secondary" onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}>
+            Load more ({rows.length - visibleCount} more)
+          </button>
+        </div>
+      )}
     </div>
   )
 }

@@ -97,8 +97,20 @@ auth.get("/verify", async (c) => {
   let user = await findUserByEmail(c.env, email)
   let isNewUser = false
   if (!user) {
-    user = await createUser(c.env, { email, emailVerified: true })
-    isNewUser = true
+    // A magic link can be consumed twice in near-parallel requests (a
+    // corporate email gateway pre-scanning the link, a double-click) --
+    // both can pass the findUserByEmail check above before either commits.
+    // users.email is UNIQUE, so the loser of that race fails here instead
+    // of creating a duplicate account; re-fetch and treat it as a login
+    // rather than surfacing a 500 for what the user experiences as a
+    // normal click.
+    try {
+      user = await createUser(c.env, { email, emailVerified: true })
+      isNewUser = true
+    } catch (err) {
+      user = await findUserByEmail(c.env, email)
+      if (!user) throw err
+    }
   }
   const session = await createSession(c.env, user.id, {
     userAgent: c.req.header("User-Agent"),
