@@ -33,7 +33,7 @@ ${JSON.stringify(input.profile, null, 2)}`
     systemPrompt,
     userMessage,
     responseSchema,
-    maxOutputTokens: 512,
+    maxOutputTokens: 1024,
   })
 
   if (isList) return Array.isArray(result) ? result.filter((v): v is string => typeof v === "string") : []

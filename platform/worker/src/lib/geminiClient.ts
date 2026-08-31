@@ -47,6 +47,13 @@ export async function callGemini(
       maxOutputTokens: args.maxOutputTokens,
       responseMimeType: "application/json",
       responseSchema: args.responseSchema,
+      // Gemini 3.x models can't fully disable thinking (unlike 2.5's
+      // thinkingBudget: 0, which conflicts with this field) -- "low" keeps
+      // it minimal, since none of this app's calls need deep reasoning.
+      // Thinking tokens count against maxOutputTokens, so without this a
+      // response can burn the whole budget on internal reasoning and get
+      // cut off mid-JSON before writing the actual answer.
+      thinkingConfig: { thinkingLevel: "low" },
     },
   })
 
@@ -67,11 +74,18 @@ export async function callGemini(
     }
 
     const data = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }>
     }
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    const candidate = data.candidates?.[0]
+    const text = candidate?.content?.parts?.[0]?.text
     if (!text) throw new Error("Gemini did not return a response")
 
-    return JSON.parse(text)
+    try {
+      return JSON.parse(text)
+    } catch {
+      // Most often MAX_TOKENS -- the response was cut off mid-JSON before
+      // finishing, usually because thinking consumed most of the budget.
+      throw new Error(`Gemini returned incomplete/invalid JSON (finishReason: ${candidate?.finishReason ?? "unknown"}): ${text}`)
+    }
   }
 }
