@@ -1,7 +1,7 @@
 import type { Env } from "../../types.js"
 import type { JobRow } from "../db/repositories/jobs.js"
 import type { Profile } from "../db/repositories/profiles.js"
-import { callGemini } from "../geminiClient.js"
+import { callLLM } from "../llmClient.js"
 
 export interface CoverLetterContent {
   greeting: string
@@ -57,7 +57,7 @@ export async function draftCoverLetter(
   env: Env,
   input: { job: Pick<JobRow, "title" | "company" | "description">; profile: Profile },
 ): Promise<CoverLetterContent> {
-  return (await callGemini(env, {
+  return (await callLLM(env, {
     systemPrompt: SYSTEM_PROMPT,
     userMessage: buildUserMessage(input.job, input.profile),
     responseSchema: COVER_LETTER_RESPONSE_SCHEMA,

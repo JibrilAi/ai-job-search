@@ -37,17 +37,29 @@ SCRAPE_QUEUE consumer (queue-consumers/scrapeConsumer.ts)
 
 RANK_QUEUE consumer (queue-consumers/rankConsumer.ts)
   -> loads the job + that user's profile
-  -> calls the Gemini API (lib/ranking/geminiClient.ts) with forced
-     structured JSON output, reproducing 04-job-evaluation.md's rubric
+  -> calls the LLM (lib/ranking/llmClient.ts -> lib/llmClient.ts) with
+     forced structured JSON output, reproducing 04-job-evaluation.md's rubric
   -> computes the weighted score server-side (never trusts the model's math)
   -> writes to user_job_rankings
 ```
+
+**LLM provider**: `lib/llmClient.ts` is the one entry point every LLM call
+site uses (ranking, resume extraction, CV tailoring, cover letters, profile
+field suggestions). It tries OpenRouter's free-model router
+(`lib/openRouterClient.ts`, model `openrouter/free` -- rotates across
+OpenRouter's free-model pool rather than pinning one, so we're not tracking
+which specific free model is still live) first, and falls back to Gemini
+(`lib/geminiClient.ts`, pay-as-you-go tier) automatically on any OpenRouter
+failure -- rate limit, a flaky free model, a transient error. Each call site
+defines its schema once in Gemini's shape (uppercase OpenAPI-style types,
+`nullable: true`); `openRouterClient.ts` converts it to the JSON Schema
+OpenRouter expects rather than the schema being duplicated per provider.
 
 Shared scrape, per-user matching (see README/plan): the `jobs` table is one
 shared pool scraped once; `user_job_rankings` is the per-user fan-out. This
 is why a new job costs one scrape but N ranking calls (one per user with a
 profile) -- the plan's cost-mitigation notes (pre-filtering, staying within
-Gemini's free-tier daily quota) apply here as usage grows.
+free-tier quotas) apply here as usage grows.
 
 ## Data model
 

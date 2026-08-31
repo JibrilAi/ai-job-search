@@ -3,7 +3,7 @@ import { getJob } from "../lib/db/repositories/jobs.js"
 import { getProfile } from "../lib/db/repositories/profiles.js"
 import { findUserById } from "../lib/db/repositories/users.js"
 import { saveRanking } from "../lib/db/repositories/rankings.js"
-import { rankJob } from "../lib/ranking/geminiClient.js"
+import { rankJob } from "../lib/ranking/llmClient.js"
 import { weightedScore, verdictForScore, isVetoed } from "../lib/ranking/schema.js"
 import { autoDraftApplication } from "../lib/documents/autoDraft.js"
 

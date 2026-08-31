@@ -1,5 +1,5 @@
 import type { Env } from "../../types.js"
-import { callGemini } from "../geminiClient.js"
+import { callLLM } from "../llmClient.js"
 import { RANKING_SYSTEM_PROMPT, buildRankingUserMessage, type RankingInput } from "./prompt.js"
 import { validateRankingResponse, type RawRankingResponse } from "./schema.js"
 
@@ -27,13 +27,13 @@ const RANKING_RESPONSE_SCHEMA = {
 }
 
 /**
- * Calls the Gemini API with forced structured JSON output so the response
- * never needs free-text parsing. Fans out once per (user, job) via
- * queue-consumers/rankConsumer.ts -- the highest-volume of this app's four
- * LLM call sites.
+ * Calls the LLM (OpenRouter, falling back to Gemini) with forced
+ * structured JSON output so the response never needs free-text parsing.
+ * Fans out once per (user, job) via queue-consumers/rankConsumer.ts -- the
+ * highest-volume of this app's LLM call sites.
  */
 export async function rankJob(env: Env, input: RankingInput): Promise<RawRankingResponse> {
-  const result = await callGemini(env, {
+  const result = await callLLM(env, {
     systemPrompt: RANKING_SYSTEM_PROMPT,
     userMessage: buildRankingUserMessage(input),
     responseSchema: RANKING_RESPONSE_SCHEMA,

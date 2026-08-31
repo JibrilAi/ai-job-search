@@ -26,24 +26,30 @@ const emptyProfile: ProfileInput = {
   autoApplyEnabled: false,
 }
 
+const env = { OPENROUTER_API_KEY: "or-key", GEMINI_API_KEY: "test-key" } as Env
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
 
 describe("suggestFieldValue", () => {
-  it("requests a STRING schema for a single-value field and returns the string", async () => {
-    const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
+  it("requests a wrapped STRING schema for a single-value field and returns the string", async () => {
+    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
+      expect(url).toBe("https://openrouter.ai/api/v1/chat/completions")
       const body = JSON.parse(init.body as string)
-      expect(body.generationConfig.responseSchema).toEqual({ type: "STRING" })
-      expect(body.contents[0].parts[0].text).toContain("LinkedIn headline")
-      return new Response(
-        JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify("Data Engineer | Python") }] } }] }),
-        { status: 200 },
-      )
+      expect(body.response_format.json_schema.schema).toEqual({
+        type: "object",
+        properties: { value: { type: "string" } },
+        required: ["value"],
+        additionalProperties: false,
+      })
+      expect(body.messages[1].content).toContain("LinkedIn headline")
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ value: "Data Engineer | Python" }) } }] }), {
+        status: 200,
+      })
     })
     vi.stubGlobal("fetch", fetchMock)
 
-    const env = { GEMINI_API_KEY: "test-key" } as Env
     const value = await suggestFieldValue(env, {
       fieldLabel: "LinkedIn headline",
       fieldType: "string",
@@ -54,18 +60,21 @@ describe("suggestFieldValue", () => {
     expect(value).toBe("Data Engineer | Python")
   })
 
-  it("requests an ARRAY-of-STRING schema for a list field and returns the array", async () => {
+  it("requests a wrapped ARRAY-of-STRING schema for a list field and returns the array", async () => {
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       const body = JSON.parse(init.body as string)
-      expect(body.generationConfig.responseSchema).toEqual({ type: "ARRAY", items: { type: "STRING" } })
-      return new Response(
-        JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(["Fintech", "Climate tech"]) }] } }] }),
-        { status: 200 },
-      )
+      expect(body.response_format.json_schema.schema).toEqual({
+        type: "object",
+        properties: { value: { type: "array", items: { type: "string" } } },
+        required: ["value"],
+        additionalProperties: false,
+      })
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ value: ["Fintech", "Climate tech"] }) } }] }), {
+        status: 200,
+      })
     })
     vi.stubGlobal("fetch", fetchMock)
 
-    const env = { GEMINI_API_KEY: "test-key" } as Env
     const value = await suggestFieldValue(env, {
       fieldLabel: "Target sectors",
       fieldType: "string[]",
@@ -79,9 +88,8 @@ describe("suggestFieldValue", () => {
   it("filters out non-string entries from a list response", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(["ok", 5, null]) }] } }] }), { status: 200 })),
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ value: ["ok", 5, null] }) } }] }), { status: 200 })),
     )
-    const env = { GEMINI_API_KEY: "test-key" } as Env
     const value = await suggestFieldValue(env, {
       fieldLabel: "Certifications",
       fieldType: "string[]",
@@ -89,5 +97,24 @@ describe("suggestFieldValue", () => {
       profile: emptyProfile,
     })
     expect(value).toEqual(["ok"])
+  })
+
+  it("falls back to Gemini when OpenRouter fails", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("openrouter.ai")) return new Response("rate limited", { status: 429 })
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify("Backup Engineer") }] } }] }), {
+        status: 200,
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const value = await suggestFieldValue(env, {
+      fieldLabel: "LinkedIn headline",
+      fieldType: "string",
+      currentValue: "",
+      profile: emptyProfile,
+    })
+
+    expect(value).toBe("Backup Engineer")
   })
 })

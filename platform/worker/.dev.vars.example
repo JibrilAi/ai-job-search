@@ -1,4 +1,10 @@
-# Free at https://aistudio.google.com/apikey -- no credit card required.
+# Primary LLM provider -- OpenRouter's free-model router. Get a key at
+# https://openrouter.ai/keys (no charge as long as you stick to :free /
+# openrouter/free models).
+OPENROUTER_API_KEY=sk-or-v1-...
+# Fallback LLM provider, used only if OpenRouter fails. Free at
+# https://aistudio.google.com/apikey with no billing attached, or paid tier
+# with much higher limits if billing is attached.
 GEMINI_API_KEY=...
 SESSION_SECRET=change-me
 MAGIC_LINK_SECRET=change-me

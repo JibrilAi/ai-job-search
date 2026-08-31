@@ -1,6 +1,6 @@
 import type { Env } from "../../types.js"
 import type { ProfileInput } from "../db/repositories/profiles.js"
-import { callGemini } from "../geminiClient.js"
+import { callLLM } from "../llmClient.js"
 
 // Resumes are short; this bounds token usage against a malformed or
 // unusually large PDF rather than truncating any real resume's content.
@@ -213,7 +213,7 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
 export async function extractProfileFromResumeText(env: Env, resumeText: string): Promise<ProfileInput> {
   const text = resumeText.slice(0, MAX_RESUME_CHARS)
 
-  const result = await callGemini(env, {
+  const result = await callLLM(env, {
     systemPrompt: SYSTEM_PROMPT,
     userMessage: `Resume text:\n\n${text}`,
     responseSchema: PROFILE_RESPONSE_SCHEMA,
