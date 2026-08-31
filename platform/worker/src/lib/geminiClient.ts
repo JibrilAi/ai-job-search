@@ -14,6 +14,21 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+// A 429 body includes a RetryInfo detail naming exactly how long Google
+// wants us to wait (e.g. "6.95s") -- that's frequently several seconds,
+// well past our own fixed backoff schedule, so honor it when present
+// instead of retrying too early and burning the retry budget for nothing.
+function parseRetryDelayMs(body: string): number | null {
+  try {
+    const parsed = JSON.parse(body) as { error?: { details?: Array<{ "@type"?: string; retryDelay?: string }> } }
+    const retryInfo = parsed.error?.details?.find((d) => d["@type"]?.includes("RetryInfo"))
+    const match = retryInfo?.retryDelay?.match(/^([\d.]+)s$/)
+    return match ? Math.ceil(parseFloat(match[1]) * 1000) : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Shared Gemini structured-output call: a system prompt + one user message,
  * with generationConfig.responseSchema forcing the entire response body to
@@ -45,7 +60,7 @@ export async function callGemini(
     if (!response.ok) {
       const body = await response.text().catch(() => "")
       if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
-        await sleep(RETRY_BASE_DELAY_MS * 2 ** attempt)
+        await sleep(parseRetryDelayMs(body) ?? RETRY_BASE_DELAY_MS * 2 ** attempt)
         continue
       }
       throw new Error(`Gemini API request failed: ${response.status} ${body}`)
