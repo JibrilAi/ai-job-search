@@ -271,9 +271,14 @@ export interface AdminUser {
   createdAt: string
 }
 
+export interface AdminApplication extends Application {
+  userEmail: string
+}
+
 export const adminApi = {
   stats: () => request<{ stats: AdminStats }>("/admin/stats"),
   users: () => request<{ users: AdminUser[] }>("/admin/users"),
   setUserRole: (id: string, role: "user" | "admin") =>
     request<{ ok: boolean }>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  applications: () => request<{ applications: AdminApplication[] }>("/admin/applications"),
 }

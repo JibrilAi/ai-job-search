@@ -118,6 +118,31 @@ export async function listApplicationsForUser(env: Env, userId: string): Promise
   return results
 }
 
+export interface AdminApplicationRow extends ApplicationRow {
+  userEmail: string
+}
+
+/** Admin-only: every application across every user, most recently updated first. */
+export async function listAllApplications(
+  env: Env,
+  opts: { limit?: number; offset?: number } = {},
+): Promise<AdminApplicationRow[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT a.id, a.user_id as userId, u.email as userEmail, a.job_id as jobId, a.date, a.company, a.sector,
+            a.role, a.role_type as roleType, a.channel, a.status, a.contact_person as contactPerson,
+            a.fit_rating as fitRating, a.notes, a.cv_document_id as cvDocumentId,
+            a.cover_letter_document_id as coverLetterDocumentId, a.source, a.deadline,
+            a.created_at as createdAt, a.updated_at as updatedAt
+     FROM applications a
+     JOIN users u ON u.id = a.user_id
+     ORDER BY a.updated_at DESC
+     LIMIT ? OFFSET ?`,
+  )
+    .bind(opts.limit ?? 100, opts.offset ?? 0)
+    .all<AdminApplicationRow>()
+  return results
+}
+
 /**
  * Status/notes update, following outcome.md Step 4's rule: touch only status
  * and notes, never blank other columns (deadline, source, etc.) on a status

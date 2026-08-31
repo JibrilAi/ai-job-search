@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import type { Env } from "../types.js"
 import { requireAuth, requireAdmin } from "../lib/auth/requireAuth.js"
 import { countAdmins, listUsers, setUserRole, type UserRole } from "../lib/db/repositories/users.js"
+import { listAllApplications } from "../lib/db/repositories/applications.js"
 
 const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>()
 admin.use("*", requireAuth, requireAdmin)
@@ -39,6 +40,16 @@ admin.get("/users", async (c) => {
       createdAt: u.createdAt,
     })),
   })
+})
+
+admin.get("/applications", async (c) => {
+  const limit = Number(c.req.query("limit") ?? 100)
+  const offset = Number(c.req.query("offset") ?? 0)
+  const applications = await listAllApplications(c.env, {
+    limit: Number.isFinite(limit) ? limit : 100,
+    offset: Number.isFinite(offset) ? offset : 0,
+  })
+  return c.json({ applications })
 })
 
 admin.patch("/users/:id/role", async (c) => {
