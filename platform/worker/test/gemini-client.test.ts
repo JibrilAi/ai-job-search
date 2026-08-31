@@ -98,4 +98,70 @@ describe("rankJob", () => {
       }),
     ).rejects.toThrow(/401/)
   })
+
+  it("does not retry a non-retryable status", async () => {
+    const fetchMock = vi.fn(async () => new Response("unauthorized", { status: 401 }))
+    vi.stubGlobal("fetch", fetchMock)
+    const env = { GEMINI_API_KEY: "bad-key" } as Env
+    await expect(
+      rankJob(env, {
+        job: { title: "x", company: "y", location: null, description: null },
+        profile: fakeProfile,
+      }),
+    ).rejects.toThrow(/401/)
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
+  it("retries a 503 and succeeds once Gemini recovers", async () => {
+    const mockResponseBody = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  scores: { technical: 50, experience: 50, behavioral: 50, career: 50 },
+                  location_verdict: "PASS",
+                  language_gate: "PASS",
+                  language_note: null,
+                  eligibility_verdict: "PASS",
+                  strengths: [],
+                  gaps: [],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    }
+    let calls = 0
+    const fetchMock = vi.fn(async () => {
+      calls += 1
+      if (calls < 3) return new Response("overloaded", { status: 503 })
+      return new Response(JSON.stringify(mockResponseBody), { status: 200 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const env = { GEMINI_API_KEY: "test-key" } as Env
+    const result = await rankJob(env, {
+      job: { title: "x", company: "y", location: null, description: null },
+      profile: fakeProfile,
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(result.scores.technical).toBe(50)
+  })
+
+  it("gives up after exhausting retries on a persistent 503", async () => {
+    const fetchMock = vi.fn(async () => new Response("overloaded", { status: 503 }))
+    vi.stubGlobal("fetch", fetchMock)
+    const env = { GEMINI_API_KEY: "test-key" } as Env
+    await expect(
+      rankJob(env, {
+        job: { title: "x", company: "y", location: null, description: null },
+        profile: fakeProfile,
+      }),
+    ).rejects.toThrow(/503/)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
 })
