@@ -225,6 +225,45 @@ export default function AdminDashboard() {
           <p className="muted">No applications match "{appQuery}".</p>
         )}
       </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Applicants</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Every application across every user, most recently updated first.
+        </p>
+        {!applications && !error && <p className="muted">Loading…</p>}
+        {applications && applications.length === 0 && <p className="muted">No applications yet.</p>}
+        {applications && applications.length > 0 && (
+          <div className="table-scroll">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>Applicant</th>
+                  <th>Company</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Source</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {applications.map((a) => (
+                  <tr key={a.id}>
+                    <td>{a.userEmail}</td>
+                    <td>{a.company}</td>
+                    <td>{a.role}</td>
+                    <td>
+                      <span className={`badge ${statusClass(a.status)}`}>{a.status}</span>
+                    </td>
+                    <td className="muted">{a.source ?? "—"}</td>
+                    <td className="muted">{new Date(a.updatedAt).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
