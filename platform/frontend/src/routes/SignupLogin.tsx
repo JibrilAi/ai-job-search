@@ -57,8 +57,9 @@ export default function SignupLogin() {
           <div className="auth-confirm-icon">✓</div>
           <h1 style={{ marginTop: 0 }}>Check your inbox</h1>
           <p>
-            If <strong>{magicLinkSentTo}</strong> is registered, a sign-in link is on its way. It expires in 15
-            minutes.
+            We've sent a sign-in link to <strong>{magicLinkSentTo}</strong>. It always takes you to the one account
+            tied to that email — signing you in if you already have one, or setting one up on the spot if you don't.
+            It expires in 15 minutes.
           </p>
           <button type="button" className="secondary" onClick={() => switchMode("magic-link")}>
             Use a different email
