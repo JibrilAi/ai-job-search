@@ -275,10 +275,18 @@ export interface AdminApplication extends Application {
   userEmail: string
 }
 
+export interface AdminUserDetail {
+  user: { id: string; email: string; role: "user" | "admin"; emailVerified: boolean; createdAt: string }
+  profile: Profile | null
+  applications: Application[]
+}
+
 export const adminApi = {
   stats: () => request<{ stats: AdminStats }>("/admin/stats"),
   users: () => request<{ users: AdminUser[] }>("/admin/users"),
+  userDetail: (id: string) => request<AdminUserDetail>(`/admin/users/${id}`),
   setUserRole: (id: string, role: "user" | "admin") =>
     request<{ ok: boolean }>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
+  deleteUser: (id: string) => request<{ ok: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
   applications: () => request<{ applications: AdminApplication[] }>("/admin/applications"),
 }

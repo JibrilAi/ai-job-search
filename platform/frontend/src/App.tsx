@@ -12,6 +12,7 @@ import DocumentStudio from "./routes/DocumentStudio.js"
 import ApplicationTracker from "./routes/ApplicationTracker.js"
 import Settings from "./routes/Settings.js"
 import AdminDashboard from "./routes/admin/AdminDashboard.js"
+import AdminUserDetail from "./routes/admin/AdminUserDetail.js"
 
 function TopNav() {
   const { user } = useAuth()
@@ -93,6 +94,16 @@ function AppRoutes() {
           <RequireAuth>
             <RequireAdmin>
               <AdminDashboard />
+            </RequireAdmin>
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/admin/users/:id"
+        element={
+          <RequireAuth>
+            <RequireAdmin>
+              <AdminUserDetail />
             </RequireAdmin>
           </RequireAuth>
         }
