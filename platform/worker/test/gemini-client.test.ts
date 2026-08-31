@@ -152,6 +152,57 @@ describe("rankJob", () => {
     expect(result.scores.technical).toBe(50)
   })
 
+  it("honors Google's RetryInfo.retryDelay on a 429 instead of the fixed backoff", async () => {
+    const mockResponseBody = {
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  scores: { technical: 60, experience: 60, behavioral: 60, career: 60 },
+                  location_verdict: "PASS",
+                  language_gate: "PASS",
+                  language_note: null,
+                  eligibility_verdict: "PASS",
+                  strengths: [],
+                  gaps: [],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    }
+    const rateLimitBody = JSON.stringify({
+      error: {
+        code: 429,
+        status: "RESOURCE_EXHAUSTED",
+        details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "0.05s" }],
+      },
+    })
+    let calls = 0
+    const fetchMock = vi.fn(async () => {
+      calls += 1
+      if (calls < 2) return new Response(rateLimitBody, { status: 429 })
+      return new Response(JSON.stringify(mockResponseBody), { status: 200 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const env = { GEMINI_API_KEY: "test-key" } as Env
+    const start = Date.now()
+    const result = await rankJob(env, {
+      job: { title: "x", company: "y", location: null, description: null },
+      profile: fakeProfile,
+    })
+    const elapsed = Date.now() - start
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(result.scores.technical).toBe(60)
+    // Honoring the parsed 50ms delay, not the fixed 500ms first-attempt backoff.
+    expect(elapsed).toBeLessThan(400)
+  })
+
   it("gives up after exhausting retries on a persistent 503", async () => {
     const fetchMock = vi.fn(async () => new Response("overloaded", { status: 503 }))
     vi.stubGlobal("fetch", fetchMock)
