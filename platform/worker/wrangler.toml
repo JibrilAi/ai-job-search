@@ -48,15 +48,29 @@ queue = "scrape-portal-queue"
 max_batch_size = 5
 max_retries = 3
 
+# rank-job-queue fans out one LLM call per (new job x user-with-profile) --
+# a single 6-hourly scrape across ~250 jobs and 2 users is already ~500
+# calls. Without a concurrency cap, Cloudflare scales up parallel consumer
+# invocations to drain a backlog that size in seconds, which is exactly what
+# was blowing through OpenRouter's/Gemini's free-tier rate limits and, with
+# no dead-letter queue configured, silently dropping most rankings after
+# max_retries -- jobs kept scraping fine while almost nothing got ranked.
+# Capping concurrency spaces the same calls out over time instead.
 [[queues.consumers]]
 queue = "rank-job-queue"
 max_batch_size = 10
 max_retries = 3
+max_concurrency = 2
 
-# Scrapes every 6 hours. Cron Triggers take no arguments -- the handler reads
-# `scrape_queries` (D1) and fans work out onto SCRAPE_QUEUE.
+# Cron Triggers are static config -- there is no API to change a live
+# trigger's schedule, so this fires every 15 minutes as a fixed heartbeat
+# and is NOT the effective scrape interval. scheduled.ts's handleScheduled()
+# treats each tick as a no-op unless `scrape_schedule.interval_minutes` (D1,
+# admin-editable via PATCH /api/admin/schedule) has elapsed since the last
+# real run -- that row is what an admin actually changes to reschedule
+# scraping, no redeploy needed.
 [triggers]
-crons = ["0 */6 * * *"]
+crons = ["*/15 * * * *"]
 
 [vars]
 ENVIRONMENT = "production"

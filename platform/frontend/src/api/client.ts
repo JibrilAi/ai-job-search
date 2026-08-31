@@ -286,6 +286,19 @@ export interface AdminUserDetail {
   applications: Application[]
 }
 
+export interface AdminScrapeQuery {
+  id: string
+  portal: string
+  enabled: boolean
+  lastRunAt: string | null
+}
+
+export interface AdminSchedule {
+  intervalMinutes: number
+  lastRunAt: string | null
+  nextRunAt: string | null
+}
+
 export const adminApi = {
   stats: () => request<{ stats: AdminStats }>("/admin/stats"),
   users: () => request<{ users: AdminUser[] }>("/admin/users"),
@@ -294,4 +307,7 @@ export const adminApi = {
     request<{ ok: boolean }>(`/admin/users/${id}/role`, { method: "PATCH", body: JSON.stringify({ role }) }),
   deleteUser: (id: string) => request<{ ok: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
   applications: () => request<{ applications: AdminApplication[] }>("/admin/applications"),
+  schedule: () => request<{ schedule: AdminSchedule; queries: AdminScrapeQuery[] }>("/admin/schedule"),
+  updateSchedule: (intervalMinutes: number) =>
+    request<{ ok: boolean }>("/admin/schedule", { method: "PATCH", body: JSON.stringify({ intervalMinutes }) }),
 }
