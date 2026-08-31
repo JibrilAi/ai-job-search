@@ -82,6 +82,60 @@ function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInp
   }
 }
 
+// Small icon button next to a field label that asks the backend to suggest
+// a value for just that one field (grounded in the rest of the in-memory
+// profile), which the caller then applies into form state -- the user
+// reviews/edits it like any other typed value before saving.
+function AiSuggest({
+  label,
+  fieldType,
+  currentValue,
+  profile,
+  onApply,
+}: {
+  label: string
+  fieldType: "string" | "string[]"
+  currentValue: string | string[]
+  profile: ProfileInput
+  onApply: (value: string | string[]) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleClick() {
+    setLoading(true)
+    setError(null)
+    try {
+      const { value } = await profileApi.suggestField(label, fieldType, currentValue, profile)
+      onApply(value)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "AI suggestion failed.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center" }}>
+      <button
+        type="button"
+        className="ai-suggest-btn"
+        title={`AI-suggest: ${label}`}
+        aria-label={`AI-suggest ${label}`}
+        onClick={handleClick}
+        disabled={loading}
+      >
+        {loading ? <span className="spinner" aria-hidden="true" /> : "✨"}
+      </button>
+      {error && (
+        <span className="error-text ai-suggest-error" role="alert">
+          {error}
+        </span>
+      )}
+    </span>
+  )
+}
+
 export default function ProfileSetup() {
   const [profile, setProfile] = useState<ProfileInput>(EMPTY_PROFILE)
   const [loading, setLoading] = useState(true)
@@ -90,6 +144,7 @@ export default function ProfileSetup() {
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
 
   const [searchQuery, setSearchQuery] = useState("")
   const [searchLocation, setSearchLocation] = useState("")
@@ -147,6 +202,11 @@ export default function ProfileSetup() {
     try {
       await profileApi.save(profile)
       setSaved(true)
+      // The search-preferences suggestion is derived server-side from the
+      // saved profile's skills/domain/target sectors -- refresh it now that
+      // there's a saved profile to derive it from (it stays empty otherwise,
+      // e.g. right after a resume import that hasn't been saved yet).
+      loadSearchPreferences()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save your profile.")
     } finally {
@@ -157,12 +217,22 @@ export default function ProfileSetup() {
   function addLanguage() {
     setProfile((p) => ({ ...p, languages: [...p.languages, { language: "", level: "" }] }))
   }
+  function updateLanguage(i: number, patch: Partial<ProfileInput["languages"][number]>) {
+    const next = [...profile.languages]
+    next[i] = { ...next[i], ...patch }
+    setProfile({ ...profile, languages: next })
+  }
 
   function addExperience() {
     setProfile((p) => ({
       ...p,
       experience: [...p.experience, { title: "", company: "", location: "", bullets: [] }],
     }))
+  }
+  function updateExperience(i: number, patch: Partial<ProfileInput["experience"][number]>) {
+    const next = [...profile.experience]
+    next[i] = { ...next[i], ...patch }
+    setProfile({ ...profile, experience: next })
   }
 
   function addEducation() {
@@ -171,21 +241,36 @@ export default function ProfileSetup() {
       education: [...p.education, { degree: "", field: "", institution: "" }],
     }))
   }
+  function updateEducation(i: number, patch: Partial<ProfileInput["education"][number]>) {
+    const next = [...profile.education]
+    next[i] = { ...next[i], ...patch }
+    setProfile({ ...profile, education: next })
+  }
 
-  async function handleResumeImport(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file) return
+  async function runResumeImport(file: File) {
     setImporting(true)
     setImportError(null)
     try {
       const { profile: extracted } = await profileApi.importResume(file)
       setProfile((current) => mergeProfile(current, extracted))
+      setResumeFile(null)
     } catch (err) {
       setImportError(err instanceof ApiError ? err.message : "Could not import that resume.")
     } finally {
       setImporting(false)
     }
+  }
+
+  function handleResumeImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setResumeFile(file)
+    runResumeImport(file)
+  }
+
+  function handleResumeRetry() {
+    if (resumeFile) runResumeImport(resumeFile)
   }
 
   if (loading) return <div className="app-shell">Loading…</div>
@@ -199,11 +284,28 @@ export default function ProfileSetup() {
         <h3>Import from resume</h3>
         <p className="muted">
           Upload a PDF resume to prefill the form below with AI-extracted details. It only fills in blank fields --
-          anything you've already typed is kept. Review everything before saving.
+          anything you've already typed is kept. Review everything before saving. Every field below also has its own
+          ✨ button if you'd rather have AI suggest just that one, based on the rest of what you've filled in.
         </p>
         <input type="file" accept="application/pdf" disabled={importing} onChange={handleResumeImport} />
-        {importing && <p className="muted">Reading your resume…</p>}
-        {importError && <p className="error-text">{importError}</p>}
+        {importing && (
+          <p className="muted inline-status">
+            <span className="spinner" aria-hidden="true" />
+            Reading your resume…
+          </p>
+        )}
+        {importError && !importing && (
+          <div className="inline-status">
+            <p className="error-text" style={{ margin: 0 }}>
+              {importError}
+            </p>
+            {resumeFile && (
+              <button type="button" className="secondary" onClick={handleResumeRetry}>
+                Retry
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -211,47 +313,119 @@ export default function ProfileSetup() {
           <h3>Identity</h3>
           <div className="form-grid">
             <div className="form-row">
-              <label>Name</label>
+              <div className="field-label-row">
+                <label>Name</label>
+                <AiSuggest
+                  label="Name"
+                  fieldType="string"
+                  currentValue={profile.name ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, name: v as string })}
+                />
+              </div>
               <input value={profile.name ?? ""} onChange={(e) => setProfile({ ...profile, name: e.target.value })} />
             </div>
             <div className="form-row">
-              <label>LinkedIn headline</label>
+              <div className="field-label-row">
+                <label>LinkedIn headline</label>
+                <AiSuggest
+                  label="LinkedIn headline"
+                  fieldType="string"
+                  currentValue={profile.linkedinHeadline ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, linkedinHeadline: v as string })}
+                />
+              </div>
               <input
                 value={profile.linkedinHeadline ?? ""}
                 onChange={(e) => setProfile({ ...profile, linkedinHeadline: e.target.value })}
               />
             </div>
             <div className="form-row">
-              <label>City</label>
+              <div className="field-label-row">
+                <label>City</label>
+                <AiSuggest
+                  label="City"
+                  fieldType="string"
+                  currentValue={profile.city ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, city: v as string })}
+                />
+              </div>
               <input value={profile.city ?? ""} onChange={(e) => setProfile({ ...profile, city: e.target.value })} />
             </div>
             <div className="form-row">
-              <label>Country</label>
+              <div className="field-label-row">
+                <label>Country</label>
+                <AiSuggest
+                  label="Country"
+                  fieldType="string"
+                  currentValue={profile.country ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, country: v as string })}
+                />
+              </div>
               <input value={profile.country ?? ""} onChange={(e) => setProfile({ ...profile, country: e.target.value })} />
             </div>
             <div className="form-row">
-              <label>Commute constraints</label>
+              <div className="field-label-row">
+                <label>Commute constraints</label>
+                <AiSuggest
+                  label="Commute constraints"
+                  fieldType="string"
+                  currentValue={profile.commuteConstraints ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, commuteConstraints: v as string })}
+                />
+              </div>
               <input
                 value={profile.commuteConstraints ?? ""}
                 onChange={(e) => setProfile({ ...profile, commuteConstraints: e.target.value })}
               />
             </div>
             <div className="form-row">
-              <label>Employment status</label>
+              <div className="field-label-row">
+                <label>Employment status</label>
+                <AiSuggest
+                  label="Employment status"
+                  fieldType="string"
+                  currentValue={profile.employmentStatus ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, employmentStatus: v as string })}
+                />
+              </div>
               <input
                 value={profile.employmentStatus ?? ""}
                 onChange={(e) => setProfile({ ...profile, employmentStatus: e.target.value })}
               />
             </div>
             <div className="form-row">
-              <label>Citizenship / PR status</label>
+              <div className="field-label-row">
+                <label>Citizenship / PR status</label>
+                <AiSuggest
+                  label="Citizenship / PR status"
+                  fieldType="string"
+                  currentValue={profile.eligibility.citizenshipOrPr ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, eligibility: { ...profile.eligibility, citizenshipOrPr: v as string } })}
+                />
+              </div>
               <input
                 value={profile.eligibility.citizenshipOrPr ?? ""}
                 onChange={(e) => setProfile({ ...profile, eligibility: { ...profile.eligibility, citizenshipOrPr: e.target.value } })}
               />
             </div>
             <div className="form-row">
-              <label>Visa constraints (hours/start date), if any</label>
+              <div className="field-label-row">
+                <label>Visa constraints (hours/start date), if any</label>
+                <AiSuggest
+                  label="Visa constraints (hours/start date), if any"
+                  fieldType="string"
+                  currentValue={profile.eligibility.visaConstraintsNote ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, eligibility: { ...profile.eligibility, visaConstraintsNote: v as string } })}
+                />
+              </div>
               <input
                 value={profile.eligibility.visaConstraintsNote ?? ""}
                 onChange={(e) =>
@@ -267,26 +441,30 @@ export default function ProfileSetup() {
           {profile.languages.map((lang, i) => (
             <div className="form-grid" key={i}>
               <div className="form-row">
-                <label>Language</label>
-                <input
-                  value={lang.language}
-                  onChange={(e) => {
-                    const next = [...profile.languages]
-                    next[i] = { ...next[i], language: e.target.value }
-                    setProfile({ ...profile, languages: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Language</label>
+                  <AiSuggest
+                    label={`Language ${i + 1}: language name`}
+                    fieldType="string"
+                    currentValue={lang.language}
+                    profile={profile}
+                    onApply={(v) => updateLanguage(i, { language: v as string })}
+                  />
+                </div>
+                <input value={lang.language} onChange={(e) => updateLanguage(i, { language: e.target.value })} />
               </div>
               <div className="form-row">
-                <label>Level (e.g. C1, native, professional working proficiency)</label>
-                <input
-                  value={lang.level}
-                  onChange={(e) => {
-                    const next = [...profile.languages]
-                    next[i] = { ...next[i], level: e.target.value }
-                    setProfile({ ...profile, languages: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Level (e.g. C1, native, professional working proficiency)</label>
+                  <AiSuggest
+                    label={`Language ${i + 1}: proficiency level`}
+                    fieldType="string"
+                    currentValue={lang.level}
+                    profile={profile}
+                    onApply={(v) => updateLanguage(i, { level: v as string })}
+                  />
+                </div>
+                <input value={lang.level} onChange={(e) => updateLanguage(i, { level: e.target.value })} />
               </div>
             </div>
           ))}
@@ -298,28 +476,64 @@ export default function ProfileSetup() {
         <div className="card">
           <h3>Skills</h3>
           <div className="form-row">
-            <label>Primary skills (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Primary skills (comma-separated)</label>
+              <AiSuggest
+                label="Primary skills"
+                fieldType="string[]"
+                currentValue={profile.skills.primary}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, skills: { ...profile.skills, primary: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.skills.primary)}
               onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, primary: fromCsv(e.target.value) } })}
             />
           </div>
           <div className="form-row">
-            <label>Secondary skills (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Secondary skills (comma-separated)</label>
+              <AiSuggest
+                label="Secondary skills"
+                fieldType="string[]"
+                currentValue={profile.skills.secondary}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, skills: { ...profile.skills, secondary: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.skills.secondary)}
               onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, secondary: fromCsv(e.target.value) } })}
             />
           </div>
           <div className="form-row">
-            <label>Domain expertise (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Domain expertise (comma-separated)</label>
+              <AiSuggest
+                label="Domain expertise"
+                fieldType="string[]"
+                currentValue={profile.skills.domain}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, skills: { ...profile.skills, domain: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.skills.domain)}
               onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, domain: fromCsv(e.target.value) } })}
             />
           </div>
           <div className="form-row">
-            <label>Software / tools (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Software / tools (comma-separated)</label>
+              <AiSuggest
+                label="Software / tools"
+                fieldType="string[]"
+                currentValue={profile.skills.software}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, skills: { ...profile.skills, software: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.skills.software)}
               onChange={(e) => setProfile({ ...profile, skills: { ...profile.skills, software: fromCsv(e.target.value) } })}
@@ -333,38 +547,44 @@ export default function ProfileSetup() {
             <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
               <div className="form-grid">
                 <div className="form-row">
-                  <label>Title</label>
-                  <input
-                    value={exp.title}
-                    onChange={(e) => {
-                      const next = [...profile.experience]
-                      next[i] = { ...next[i], title: e.target.value }
-                      setProfile({ ...profile, experience: next })
-                    }}
-                  />
+                  <div className="field-label-row">
+                    <label>Title</label>
+                    <AiSuggest
+                      label={`Experience ${i + 1}: job title`}
+                      fieldType="string"
+                      currentValue={exp.title}
+                      profile={profile}
+                      onApply={(v) => updateExperience(i, { title: v as string })}
+                    />
+                  </div>
+                  <input value={exp.title} onChange={(e) => updateExperience(i, { title: e.target.value })} />
                 </div>
                 <div className="form-row">
-                  <label>Company</label>
-                  <input
-                    value={exp.company}
-                    onChange={(e) => {
-                      const next = [...profile.experience]
-                      next[i] = { ...next[i], company: e.target.value }
-                      setProfile({ ...profile, experience: next })
-                    }}
-                  />
+                  <div className="field-label-row">
+                    <label>Company</label>
+                    <AiSuggest
+                      label={`Experience ${i + 1}: company`}
+                      fieldType="string"
+                      currentValue={exp.company}
+                      profile={profile}
+                      onApply={(v) => updateExperience(i, { company: v as string })}
+                    />
+                  </div>
+                  <input value={exp.company} onChange={(e) => updateExperience(i, { company: e.target.value })} />
                 </div>
               </div>
               <div className="form-row">
-                <label>Key bullets (comma-separated)</label>
-                <textarea
-                  value={csv(exp.bullets)}
-                  onChange={(e) => {
-                    const next = [...profile.experience]
-                    next[i] = { ...next[i], bullets: fromCsv(e.target.value) }
-                    setProfile({ ...profile, experience: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Key bullets (comma-separated)</label>
+                  <AiSuggest
+                    label={`Experience ${i + 1} (${exp.title || "untitled"}): key bullets`}
+                    fieldType="string[]"
+                    currentValue={exp.bullets}
+                    profile={profile}
+                    onApply={(v) => updateExperience(i, { bullets: v as string[] })}
+                  />
+                </div>
+                <textarea value={csv(exp.bullets)} onChange={(e) => updateExperience(i, { bullets: fromCsv(e.target.value) })} />
               </div>
             </div>
           ))}
@@ -378,37 +598,43 @@ export default function ProfileSetup() {
           {profile.education.map((ed, i) => (
             <div className="form-grid" key={i}>
               <div className="form-row">
-                <label>Degree</label>
-                <input
-                  value={ed.degree}
-                  onChange={(e) => {
-                    const next = [...profile.education]
-                    next[i] = { ...next[i], degree: e.target.value }
-                    setProfile({ ...profile, education: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Degree</label>
+                  <AiSuggest
+                    label={`Education ${i + 1}: degree`}
+                    fieldType="string"
+                    currentValue={ed.degree}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { degree: v as string })}
+                  />
+                </div>
+                <input value={ed.degree} onChange={(e) => updateEducation(i, { degree: e.target.value })} />
               </div>
               <div className="form-row">
-                <label>Field</label>
-                <input
-                  value={ed.field}
-                  onChange={(e) => {
-                    const next = [...profile.education]
-                    next[i] = { ...next[i], field: e.target.value }
-                    setProfile({ ...profile, education: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Field</label>
+                  <AiSuggest
+                    label={`Education ${i + 1}: field of study`}
+                    fieldType="string"
+                    currentValue={ed.field}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { field: v as string })}
+                  />
+                </div>
+                <input value={ed.field} onChange={(e) => updateEducation(i, { field: e.target.value })} />
               </div>
               <div className="form-row">
-                <label>Institution</label>
-                <input
-                  value={ed.institution}
-                  onChange={(e) => {
-                    const next = [...profile.education]
-                    next[i] = { ...next[i], institution: e.target.value }
-                    setProfile({ ...profile, education: next })
-                  }}
-                />
+                <div className="field-label-row">
+                  <label>Institution</label>
+                  <AiSuggest
+                    label={`Education ${i + 1}: institution`}
+                    fieldType="string"
+                    currentValue={ed.institution}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { institution: v as string })}
+                  />
+                </div>
+                <input value={ed.institution} onChange={(e) => updateEducation(i, { institution: e.target.value })} />
               </div>
             </div>
           ))}
@@ -420,53 +646,113 @@ export default function ProfileSetup() {
         <div className="card">
           <h3>Credentials</h3>
           <div className="form-row">
-            <label>Certifications (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Certifications (comma-separated)</label>
+              <AiSuggest
+                label="Certifications"
+                fieldType="string[]"
+                currentValue={profile.certifications}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, certifications: v as string[] })}
+              />
+            </div>
             <input
               value={csv(profile.certifications)}
               onChange={(e) => setProfile({ ...profile, certifications: fromCsv(e.target.value) })}
             />
           </div>
           <div className="form-row">
-            <label>Publications (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Publications (comma-separated)</label>
+              <AiSuggest
+                label="Publications"
+                fieldType="string[]"
+                currentValue={profile.publications}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, publications: v as string[] })}
+              />
+            </div>
             <input
               value={csv(profile.publications)}
               onChange={(e) => setProfile({ ...profile, publications: fromCsv(e.target.value) })}
             />
           </div>
           <div className="form-row">
-            <label>Awards (comma-separated)</label>
-            <input
-              value={csv(profile.awards)}
-              onChange={(e) => setProfile({ ...profile, awards: fromCsv(e.target.value) })}
-            />
+            <div className="field-label-row">
+              <label>Awards (comma-separated)</label>
+              <AiSuggest
+                label="Awards"
+                fieldType="string[]"
+                currentValue={profile.awards}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, awards: v as string[] })}
+              />
+            </div>
+            <input value={csv(profile.awards)} onChange={(e) => setProfile({ ...profile, awards: fromCsv(e.target.value) })} />
           </div>
         </div>
 
         <div className="card">
           <h3>Behavioral profile</h3>
           <div className="form-row">
-            <label>Traits (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Traits (comma-separated)</label>
+              <AiSuggest
+                label="Behavioral traits"
+                fieldType="string[]"
+                currentValue={profile.behavioral.traits}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, behavioral: { ...profile.behavioral, traits: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.behavioral.traits)}
               onChange={(e) => setProfile({ ...profile, behavioral: { ...profile.behavioral, traits: fromCsv(e.target.value) } })}
             />
           </div>
           <div className="form-row">
-            <label>Strengths</label>
+            <div className="field-label-row">
+              <label>Strengths</label>
+              <AiSuggest
+                label="Behavioral strengths"
+                fieldType="string"
+                currentValue={profile.behavioral.strengths}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, behavioral: { ...profile.behavioral, strengths: v as string } })}
+              />
+            </div>
             <textarea
               value={profile.behavioral.strengths}
               onChange={(e) => setProfile({ ...profile, behavioral: { ...profile.behavioral, strengths: e.target.value } })}
             />
           </div>
           <div className="form-row">
-            <label>Growth areas</label>
+            <div className="field-label-row">
+              <label>Growth areas</label>
+              <AiSuggest
+                label="Growth areas"
+                fieldType="string"
+                currentValue={profile.behavioral.growthAreas}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, behavioral: { ...profile.behavioral, growthAreas: v as string } })}
+              />
+            </div>
             <textarea
               value={profile.behavioral.growthAreas}
               onChange={(e) => setProfile({ ...profile, behavioral: { ...profile.behavioral, growthAreas: e.target.value } })}
             />
           </div>
           <div className="form-row">
-            <label>Thrives in</label>
+            <div className="field-label-row">
+              <label>Thrives in</label>
+              <AiSuggest
+                label="Thrives in (ideal environment)"
+                fieldType="string"
+                currentValue={profile.behavioral.idealEnvironment}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, behavioral: { ...profile.behavioral, idealEnvironment: v as string } })}
+              />
+            </div>
             <textarea
               value={profile.behavioral.idealEnvironment}
               onChange={(e) =>
@@ -479,14 +765,32 @@ export default function ProfileSetup() {
         <div className="card">
           <h3>Career &amp; motivation</h3>
           <div className="form-row">
-            <label>Target sectors (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Target sectors (comma-separated)</label>
+              <AiSuggest
+                label="Target sectors"
+                fieldType="string[]"
+                currentValue={profile.targetSectors}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, targetSectors: v as string[] })}
+              />
+            </div>
             <input
               value={csv(profile.targetSectors)}
               onChange={(e) => setProfile({ ...profile, targetSectors: fromCsv(e.target.value) })}
             />
           </div>
           <div className="form-row">
-            <label>Energizing tasks (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Energizing tasks (comma-separated)</label>
+              <AiSuggest
+                label="Energizing tasks"
+                fieldType="string[]"
+                currentValue={profile.motivation.energizingTasks}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, motivation: { ...profile.motivation, energizingTasks: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.motivation.energizingTasks)}
               onChange={(e) =>
@@ -495,7 +799,16 @@ export default function ProfileSetup() {
             />
           </div>
           <div className="form-row">
-            <label>Draining tasks (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Draining tasks (comma-separated)</label>
+              <AiSuggest
+                label="Draining tasks"
+                fieldType="string[]"
+                currentValue={profile.motivation.drainingTasks}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, motivation: { ...profile.motivation, drainingTasks: v as string[] } })}
+              />
+            </div>
             <input
               value={csv(profile.motivation.drainingTasks)}
               onChange={(e) =>
@@ -504,7 +817,16 @@ export default function ProfileSetup() {
             />
           </div>
           <div className="form-row">
-            <label>Deal-breakers (comma-separated)</label>
+            <div className="field-label-row">
+              <label>Deal-breakers (comma-separated)</label>
+              <AiSuggest
+                label="Deal-breakers"
+                fieldType="string[]"
+                currentValue={profile.dealbreakers}
+                profile={profile}
+                onApply={(v) => setProfile({ ...profile, dealbreakers: v as string[] })}
+              />
+            </div>
             <input
               value={csv(profile.dealbreakers)}
               onChange={(e) => setProfile({ ...profile, dealbreakers: fromCsv(e.target.value) })}
