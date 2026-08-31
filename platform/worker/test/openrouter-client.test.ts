@@ -93,4 +93,33 @@ describe("callOpenRouter", () => {
       }),
     ).rejects.toThrow(/did not return a response/)
   })
+
+  it("strips a markdown code fence around the JSON before parsing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '```json\n{"value":"hi"}\n```' } }] }), { status: 200 })),
+    )
+    const result = await callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
+      systemPrompt: "sys",
+      userMessage: "usr",
+      responseSchema: { type: "OBJECT", properties: { value: { type: "STRING" } }, required: ["value"] },
+      maxOutputTokens: 512,
+    })
+    expect(result).toEqual({ value: "hi" })
+  })
+
+  it("throws a diagnosable error naming the model when the content isn't valid JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ model: "some/free-model", choices: [{ message: { content: "sorry, I can't help with that" } }] }), { status: 200 })),
+    )
+    await expect(
+      callOpenRouter({ OPENROUTER_API_KEY: "test-or-key" } as Env, {
+        systemPrompt: "sys",
+        userMessage: "usr",
+        responseSchema: { type: "OBJECT", properties: { value: { type: "STRING" } }, required: ["value"] },
+        maxOutputTokens: 512,
+      }),
+    ).rejects.toThrow(/some\/free-model/)
+  })
 })

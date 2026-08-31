@@ -86,9 +86,18 @@ export async function callOpenRouter(
     throw new Error(`OpenRouter API request failed: ${response.status} ${body}`)
   }
 
-  const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> }
+  const data = (await response.json()) as { model?: string; choices?: Array<{ message?: { content?: string } }> }
   const text = data.choices?.[0]?.message?.content
   if (!text) throw new Error("OpenRouter did not return a response")
 
-  return JSON.parse(text) as unknown
+  // A model can answer with prose or a ```json fenced block despite
+  // strict structured-output being requested -- strip fencing before
+  // parsing, and surface the model name + raw text on failure so a bad
+  // response is diagnosable from logs instead of a bare SyntaxError.
+  const jsonText = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "")
+  try {
+    return JSON.parse(jsonText) as unknown
+  } catch {
+    throw new Error(`OpenRouter (${data.model ?? "unknown model"}) returned unparseable JSON: ${text.slice(0, 500)}`)
+  }
 }
