@@ -4,6 +4,7 @@ import { requireAuth } from "../lib/auth/requireAuth.js"
 import { getProfile, upsertProfile, type ProfileInput } from "../lib/db/repositories/profiles.js"
 import { extractPdfText } from "../lib/documents/extractText.js"
 import { extractProfileFromResumeText } from "../lib/profile/resumeExtraction.js"
+import { suggestFieldValue, type FieldType } from "../lib/profile/fieldSuggestion.js"
 import { suggestScrapeQuery } from "../lib/scrapeQuerySuggestion.js"
 import { getUserScrapeQueries, upsertUserScrapeQuery } from "../lib/db/repositories/scrapeQueries.js"
 import { KEYWORD_SEARCHABLE_PORTALS } from "../lib/scrapers/registry.js"
@@ -51,6 +52,44 @@ profile.post("/resume", async (c) => {
   } catch (err) {
     console.error("resume extraction failed:", err)
     return c.json({ error: "could not extract a profile from this resume, please fill it in manually" }, 502)
+  }
+})
+
+// Suggests a value for one field of the (possibly unsaved) profile the
+// frontend currently has in memory -- generic across every field in the
+// form rather than one endpoint per field, since the request is always the
+// same shape: which field, what type, and the rest of the profile to
+// ground the suggestion in. Does NOT save anything.
+profile.post("/suggest-field", async (c) => {
+  const body = await c.req
+    .json<{ fieldLabel?: unknown; fieldType?: unknown; currentValue?: unknown; profile?: unknown }>()
+    .catch(() => null)
+  if (!body || typeof body.fieldLabel !== "string" || (body.fieldType !== "string" && body.fieldType !== "string[]")) {
+    return c.json({ error: "fieldLabel and fieldType ('string' | 'string[]') are required" }, 400)
+  }
+  if (typeof body.profile !== "object" || body.profile === null) {
+    return c.json({ error: "profile is required" }, 400)
+  }
+  const currentValue =
+    body.fieldType === "string[]"
+      ? Array.isArray(body.currentValue)
+        ? body.currentValue.filter((v): v is string => typeof v === "string")
+        : []
+      : typeof body.currentValue === "string"
+        ? body.currentValue
+        : ""
+
+  try {
+    const value = await suggestFieldValue(c.env, {
+      fieldLabel: body.fieldLabel,
+      fieldType: body.fieldType as FieldType,
+      currentValue,
+      profile: body.profile as ProfileInput,
+    })
+    return c.json({ value })
+  } catch (err) {
+    console.error("field suggestion failed:", err)
+    return c.json({ error: "could not get an AI suggestion for this field" }, 502)
   }
 })
 

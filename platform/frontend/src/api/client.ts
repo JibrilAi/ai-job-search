@@ -108,6 +108,11 @@ export const profileApi = {
       method: "PUT",
       body: JSON.stringify({ query, location, enabled: true }),
     }),
+  suggestField: (fieldLabel: string, fieldType: "string" | "string[]", currentValue: string | string[], profile: ProfileInput) =>
+    request<{ value: string | string[] }>("/profile/suggest-field", {
+      method: "POST",
+      body: JSON.stringify({ fieldLabel, fieldType, currentValue, profile }),
+    }),
 }
 
 export interface JobSummary {

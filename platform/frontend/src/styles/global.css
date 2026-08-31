@@ -71,6 +71,27 @@ a:hover { color: var(--accent-hover); }
 .form-row label { font-size: 0.85rem; color: var(--muted); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
 
+.field-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.field-label-row label { margin: 0; }
+
+.ai-suggest-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--accent);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ai-suggest-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(91, 140, 255, 0.1); }
+.ai-suggest-error { display: block; margin-top: 4px; }
+
 input, textarea, select {
   background: #0d0f13;
   border: 1px solid var(--border);
@@ -105,6 +126,21 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .error-text { color: var(--bad); font-size: 0.85rem; }
 .muted { color: var(--muted); font-size: 0.85rem; }
+
+.inline-status { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 
 .job-list { display: flex; flex-direction: column; gap: 10px; }
 .job-row {
