@@ -160,3 +160,12 @@ git-integration auto-deploy configured in the Cloudflare dashboard.
   rendering is code-driven, not template-driven.
 - Gmail sync, Notion sync, Vectorize semantic search are out of scope (see
   `docs/architecture.md`).
+- **freehire.me auto-submit** (`profile.autoSubmitMode`, `lib/documents/
+  autoSubmit.ts`) is unverified against the real site -- same sandbox
+  network restriction as the scraper above. Its form-field matching is a
+  generic label/keyword heuristic, not freehire.me-specific selectors;
+  treat the first deployment as a first attempt and expect to iterate once
+  it's tested live. It also can't fill a phone number (no phone field
+  exists in the profile schema yet, see above). Deliberately does not
+  support LinkedIn or any other portal, even with the setting on -- see
+  `docs/architecture.md`'s "Auto-apply and auto-submit" section.

@@ -52,6 +52,12 @@ export interface Eligibility {
   visaConstraintsNote: string | null
 }
 
+// off: draft only (today's behavior). confirm: auto-fill the application
+// and stop for the user to send. unattended: auto-fill AND submit with no
+// human step. Only takes effect when autoApplyEnabled is also on, and
+// only for freehire.me jobs -- see lib/documents/autoSubmit.ts.
+export type AutoSubmitMode = "off" | "confirm" | "unattended"
+
 export interface Profile {
   userId: string
   name: string | null
@@ -78,6 +84,7 @@ export interface Profile {
   // automatically -- see lib/documents/autoDraft.ts. Never auto-submits
   // anything to a job board.
   autoApplyEnabled: boolean
+  autoSubmitMode: AutoSubmitMode
   profileVersion: number
   updatedAt: string
 }
@@ -104,6 +111,7 @@ interface ProfileRow {
   dealbreakersJson: string
   eligibilityJson: string
   autoApplyEnabled: number
+  autoSubmitMode: string
   profileVersion: number
   updatedAt: string
 }
@@ -131,6 +139,7 @@ function rowToProfile(row: ProfileRow): Profile {
     dealbreakers: JSON.parse(row.dealbreakersJson),
     eligibility: JSON.parse(row.eligibilityJson),
     autoApplyEnabled: !!row.autoApplyEnabled,
+    autoSubmitMode: row.autoSubmitMode === "confirm" || row.autoSubmitMode === "unattended" ? row.autoSubmitMode : "off",
     profileVersion: row.profileVersion,
     updatedAt: row.updatedAt,
   }
@@ -147,6 +156,7 @@ export async function getProfile(env: Env, userId: string): Promise<Profile | nu
             behavioral_json as behavioralJson, motivation_json as motivationJson,
             target_sectors_json as targetSectorsJson, dealbreakers_json as dealbreakersJson,
             eligibility_json as eligibilityJson, auto_apply_enabled as autoApplyEnabled,
+            auto_submit_mode as autoSubmitMode,
             profile_version as profileVersion, updated_at as updatedAt
      FROM profiles WHERE user_id = ?`,
   )
@@ -169,8 +179,8 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
        linkedin_headline, languages_json, education_json, experience_json, skills_json,
        certifications_json, publications_json, awards_json, behavioral_json, motivation_json,
        target_sectors_json, dealbreakers_json, eligibility_json, auto_apply_enabled,
-       profile_version, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       auto_submit_mode, profile_version, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        name = excluded.name, city = excluded.city, country = excluded.country,
        commute_constraints = excluded.commute_constraints, cv_language = excluded.cv_language,
@@ -181,7 +191,7 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
        awards_json = excluded.awards_json, behavioral_json = excluded.behavioral_json,
        motivation_json = excluded.motivation_json, target_sectors_json = excluded.target_sectors_json,
        dealbreakers_json = excluded.dealbreakers_json, eligibility_json = excluded.eligibility_json,
-       auto_apply_enabled = excluded.auto_apply_enabled,
+       auto_apply_enabled = excluded.auto_apply_enabled, auto_submit_mode = excluded.auto_submit_mode,
        profile_version = excluded.profile_version, updated_at = excluded.updated_at`,
   )
     .bind(
@@ -206,6 +216,7 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
       JSON.stringify(input.dealbreakers ?? []),
       JSON.stringify(input.eligibility ?? { citizenshipOrPr: null, visaConstraintsNote: null }),
       input.autoApplyEnabled ? 1 : 0,
+      input.autoSubmitMode ?? "off",
       nextVersion,
       updatedAt,
     )

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../api/AuthContext.js"
-import { profileApi, ApiError, type Profile } from "../api/client.js"
+import { profileApi, ApiError, type Profile, type AutoSubmitMode } from "../api/client.js"
 
 export default function Settings() {
   const { user, logout } = useAuth()
@@ -28,7 +28,25 @@ export default function Settings() {
     setSaving(true)
     const { userId, profileVersion, updatedAt, ...input } = profile
     try {
-      const { profile: saved } = await profileApi.save({ ...input, autoApplyEnabled: next })
+      // Turning auto-draft off also turns off auto-submit -- there's
+      // nothing to submit without a draft, and it avoids a confusing
+      // "auto-submit: unattended" setting sitting around inert.
+      const { profile: saved } = await profileApi.save({ ...input, autoApplyEnabled: next, autoSubmitMode: next ? input.autoSubmitMode : "off" })
+      setProfile(saved)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save that setting.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function changeAutoSubmitMode(next: AutoSubmitMode) {
+    if (!profile) return
+    setError(null)
+    setSaving(true)
+    const { userId, profileVersion, updatedAt, ...input } = profile
+    try {
+      const { profile: saved } = await profileApi.save({ ...input, autoSubmitMode: next })
       setProfile(saved)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save that setting.")
@@ -77,6 +95,54 @@ export default function Settings() {
                 </p>
               </span>
             </label>
+
+            {profile.autoApplyEnabled && (
+              <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border, #333)" }}>
+                <strong>Auto-submit to freehire.me</strong>
+                <p className="muted" style={{ margin: "4px 0 10px" }}>
+                  Goes further than drafting: fills in the actual application form on freehire.me. Only applies to
+                  freehire.me jobs — every other portal (including LinkedIn) still stops at drafting, since automating
+                  a real submission there risks your account being flagged or banned.
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label className="toggle-row">
+                    <input
+                      type="radio"
+                      name="autoSubmitMode"
+                      checked={profile.autoSubmitMode === "off"}
+                      disabled={saving}
+                      onChange={() => changeAutoSubmitMode("off")}
+                    />
+                    <span>Off — draft only (default)</span>
+                  </label>
+                  <label className="toggle-row">
+                    <input
+                      type="radio"
+                      name="autoSubmitMode"
+                      checked={profile.autoSubmitMode === "confirm"}
+                      disabled={saving}
+                      onChange={() => changeAutoSubmitMode("confirm")}
+                    />
+                    <span>
+                      Auto-fill, then I confirm — fills the form and stops; you send it yourself from the tracker
+                    </span>
+                  </label>
+                  <label className="toggle-row">
+                    <input
+                      type="radio"
+                      name="autoSubmitMode"
+                      checked={profile.autoSubmitMode === "unattended"}
+                      disabled={saving}
+                      onChange={() => changeAutoSubmitMode("unattended")}
+                    />
+                    <span>
+                      Fully unattended — submits immediately, nobody reviews it first.{" "}
+                      <strong>A wrong or hallucinated submission goes out under your name with no way to catch it.</strong>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

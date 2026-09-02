@@ -61,6 +61,11 @@ export const authApi = {
   session: () => request<{ user: CurrentUser | null }>("/auth/session"),
 }
 
+// off: draft only. confirm: auto-fill a freehire.me application and stop
+// for the user to send. unattended: auto-fill AND submit with no human
+// step. Only takes effect when autoApplyEnabled is also on.
+export type AutoSubmitMode = "off" | "confirm" | "unattended"
+
 // Mirrors worker/src/lib/db/repositories/profiles.ts's Profile shape.
 export interface Profile {
   userId: string
@@ -84,6 +89,7 @@ export interface Profile {
   dealbreakers: string[]
   eligibility: { citizenshipOrPr: string | null; visaConstraintsNote: string | null }
   autoApplyEnabled: boolean
+  autoSubmitMode: AutoSubmitMode
   profileVersion: number
   updatedAt: string
 }
@@ -205,6 +211,7 @@ export const documentsApi = {
 
 export type ApplicationStatus =
   | "drafted"
+  | "ready_to_submit"
   | "applied"
   | "interview"
   | "offer"
@@ -256,6 +263,10 @@ export const applicationsApi = {
       method: "PATCH",
       body: JSON.stringify({ status, note }),
     }),
+  // Sends a "ready_to_submit" application (freehire.me auto-submit, confirm
+  // mode) -- re-runs the same fill automation and this time actually clicks
+  // submit. See worker/src/lib/documents/autoSubmit.ts.
+  submit: (id: string) => request<{ application: Application }>(`/applications/${id}/submit`, { method: "POST" }),
 }
 
 export interface AdminStats {

@@ -3,6 +3,7 @@ import { applicationsApi, ApiError, type Application, type ApplicationStatus } f
 
 const STATUSES: ApplicationStatus[] = [
   "drafted",
+  "ready_to_submit",
   "applied",
   "interview",
   "offer",
@@ -16,7 +17,7 @@ const STATUSES: ApplicationStatus[] = [
 function statusClass(status: ApplicationStatus): string {
   if (["hired", "offer"].includes(status)) return "strong"
   if (status === "interview") return "good"
-  if (status === "applied" || status === "drafted") return "moderate"
+  if (status === "applied" || status === "drafted" || status === "ready_to_submit") return "moderate"
   return "weak"
 }
 
@@ -26,6 +27,7 @@ export default function ApplicationTracker() {
   const [company, setCompany] = useState("")
   const [role, setRole] = useState("")
   const [creating, setCreating] = useState(false)
+  const [sendingId, setSendingId] = useState<string | null>(null)
 
   function load() {
     applicationsApi
@@ -58,6 +60,22 @@ export default function ApplicationTracker() {
       load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not update status.")
+    }
+  }
+
+  // Sends a "ready_to_submit" application (freehire.me auto-fill, confirm
+  // mode): re-runs the fill automation server-side and this time actually
+  // clicks submit -- see worker/src/lib/documents/autoSubmit.ts.
+  async function handleSend(id: string) {
+    setSendingId(id)
+    setError(null)
+    try {
+      await applicationsApi.submit(id)
+      load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not send this application.")
+    } finally {
+      setSendingId(null)
     }
   }
 
@@ -104,6 +122,11 @@ export default function ApplicationTracker() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span className={`badge ${statusClass(app.status)}`}>{app.status}</span>
+              {app.status === "ready_to_submit" && (
+                <button type="button" disabled={sendingId === app.id} onClick={() => handleSend(app.id)}>
+                  {sendingId === app.id ? "Sending…" : "Send application"}
+                </button>
+              )}
               <select value={app.status} onChange={(e) => handleStatusChange(app.id, e.target.value as ApplicationStatus)}>
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>
