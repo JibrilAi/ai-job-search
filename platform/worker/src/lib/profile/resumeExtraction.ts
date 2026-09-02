@@ -1,6 +1,7 @@
 import type { Env } from "../../types.js"
 import type { ProfileInput } from "../db/repositories/profiles.js"
 import { callLLM } from "../llmClient.js"
+import { callGemini } from "../geminiClient.js"
 
 // Resumes are short; this bounds token usage against a malformed or
 // unusually large PDF rather than truncating any real resume's content.
@@ -211,10 +212,22 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
   }
 }
 
+// A real resume should trip at least one of these -- if all four are
+// empty, the extraction produced nothing usable, whether because the LLM
+// genuinely found nothing or (the actual observed case) because
+// OpenRouter's free-model pool returned technically-valid-but-wrong-shaped
+// or empty JSON for this schema without throwing. This is by far the
+// largest/most deeply nested schema of any call site (nested
+// education/experience arrays of objects plus several sub-objects), which
+// openRouterClient.ts's own comments already flag as the shape that free
+// pool honors least reliably under strict structured output.
+function isEmptyExtraction(profile: ProfileInput): boolean {
+  return !profile.name && profile.experience.length === 0 && profile.education.length === 0 && profile.skills.primary.length === 0
+}
+
 export async function extractProfileFromResumeText(env: Env, resumeText: string): Promise<ProfileInput> {
   const text = resumeText.slice(0, MAX_RESUME_CHARS)
-
-  const result = await callLLM(env, {
+  const args = {
     systemPrompt: SYSTEM_PROMPT,
     userMessage: `Resume text:\n\n${text}`,
     responseSchema: PROFILE_RESPONSE_SCHEMA,
@@ -225,7 +238,19 @@ export async function extractProfileFromResumeText(env: Env, resumeText: string)
     // maxOutputTokens, and a tight budget here risks the same
     // truncated-mid-JSON failure already seen and fixed elsewhere.
     maxOutputTokens: 8192,
-  })
+  }
 
-  return normalizeExtractedProfile(result)
+  const primary = normalizeExtractedProfile(await callLLM(env, args))
+  if (!isEmptyExtraction(primary)) return primary
+
+  // callLLM's OpenRouter->Gemini fallback only triggers when OpenRouter
+  // throws -- a parseable-but-empty/wrong-shaped response doesn't throw,
+  // so it never reaches that fallback on its own. Retry directly against
+  // Gemini here, the same recovery callLLM would have done had OpenRouter
+  // actually failed loudly.
+  console.warn("resume extraction: primary provider returned an empty profile, retrying directly against Gemini")
+  const fallback = normalizeExtractedProfile(await callGemini(env, args))
+  if (!isEmptyExtraction(fallback)) return fallback
+
+  throw new Error("resume extraction produced no usable data from either provider")
 }
