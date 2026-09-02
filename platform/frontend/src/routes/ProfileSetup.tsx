@@ -22,6 +22,7 @@ const EMPTY_PROFILE: ProfileInput = {
   dealbreakers: [],
   eligibility: { citizenshipOrPr: "", visaConstraintsNote: "" },
   autoApplyEnabled: false,
+  autoSubmitMode: "off",
 }
 
 function csv(list: string[]): string {
@@ -76,9 +77,10 @@ function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInp
       citizenshipOrPr: str(current.eligibility.citizenshipOrPr, incoming.eligibility.citizenshipOrPr),
       visaConstraintsNote: str(current.eligibility.visaConstraintsNote, incoming.eligibility.visaConstraintsNote),
     },
-    // A resume PDF has no opinion on this setting -- always keep whatever
+    // A resume PDF has no opinion on these settings -- always keep whatever
     // the form already has, never take the extraction's placeholder value.
     autoApplyEnabled: current.autoApplyEnabled,
+    autoSubmitMode: current.autoSubmitMode,
   }
 }
 

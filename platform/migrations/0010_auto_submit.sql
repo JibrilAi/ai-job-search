@@ -1,0 +1,11 @@
+-- Per-user opt-in for the freehire.me auto-submit engine (see
+-- lib/documents/autoSubmit.ts). Only takes effect when auto_apply_enabled
+-- is also on (this is what actually triggers the drafting pipeline) and
+-- only for jobs from portal = 'freehire' -- see autoSubmit.ts's docstring
+-- for why LinkedIn is deliberately excluded.
+--   off        (default) -- draft only, exactly today's behavior
+--   confirm    -- auto-fill the application and stop at a review step
+--                 (applications.status = 'ready_to_submit'); the user
+--                 sends it themselves from the tracker
+--   unattended -- auto-fill AND submit immediately, no human step
+ALTER TABLE profiles ADD COLUMN auto_submit_mode TEXT NOT NULL DEFAULT 'off';

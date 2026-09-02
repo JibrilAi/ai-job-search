@@ -24,6 +24,7 @@ const emptyProfile: ProfileInput = {
   dealbreakers: [],
   eligibility: { citizenshipOrPr: null, visaConstraintsNote: null },
   autoApplyEnabled: false,
+  autoSubmitMode: "off",
 }
 
 const env = { OPENROUTER_API_KEY: "or-key", GEMINI_API_KEY: "test-key" } as Env

@@ -105,11 +105,38 @@ Fonts (`lib/documents/fonts.ts`) are base64-encoded from the project's actual
 `@font-face` data URIs, so Browser Rendering never needs an external font
 fetch.
 
+## Auto-apply and auto-submit
+
+`lib/documents/autoDraft.ts`'s `autoDraftApplication()` is called from
+`rankConsumer.ts` when a user has `profile.autoApplyEnabled` on and a job
+just ranked Strong/Good Fit: it drafts a tailored CV, cover letter, and a
+`drafted`-status `applications` row -- the same pipeline as the manual
+document-studio endpoints above, just triggered automatically instead of
+by a user click.
+
+`profile.autoSubmitMode` (`"off"` | `"confirm"` | `"unattended"`) goes one
+step further, but **only for jobs from `portal === "freehire"`**:
+`lib/documents/autoSubmit.ts`'s `runFreehireApplication()` browser-automates
+freehire.me's actual apply form (Puppeteer, same Browser Rendering binding
+as PDF generation) -- generic label/name-keyword field matching, PDF resume
+upload injected client-side via the DataTransfer API (Browser Rendering has
+no writable filesystem for Puppeteer's usual `uploadFile(path)`). `"confirm"`
+stops after filling (`applications.status = "ready_to_submit"`, sent later
+via `POST /applications/:id/submit`); `"unattended"` clicks the real submit
+button immediately, no human step. **LinkedIn is deliberately excluded even
+with auto-submit on** -- it aggressively detects and bans automated account
+activity and this would likely violate its Terms of Service; LinkedIn jobs
+always stop at drafting. This repo's sandbox cannot reach freehire.me to
+verify the automation's selectors against the real site -- treat it as a
+first attempt pending real-world testing, not a finished integration.
+
 ## What's deliberately not built yet
 
 - LinkedIn and the four Danish portals' scrapers -- ported the same way as
   `lib/scrapers/freehire.ts`, registered in `lib/scrapers/registry.ts`, but
   deferred (LinkedIn especially, given anti-scraping risk at platform scale).
+- LinkedIn auto-submission -- see "Auto-apply and auto-submit" above; this
+  is an intentional, permanent boundary, not a TODO.
 - Vectorize (semantic job search/dedupe) -- exact-key dedupe covers MVP.
 - Gmail sync, Notion sync -- would need Worker-side OAuth, out of scope for
   now.

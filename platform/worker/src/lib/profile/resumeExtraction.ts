@@ -204,9 +204,10 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
       visaConstraintsNote: strOrNull(eligibility.visaConstraintsNote),
     },
     // Not derivable from a resume PDF -- the frontend's merge always keeps
-    // the form's existing value for this field instead (ProfileSetup.tsx's
+    // the form's existing value for these fields instead (ProfileSetup.tsx's
     // mergeProfile), this is just a placeholder to satisfy the type.
     autoApplyEnabled: false,
+    autoSubmitMode: "off",
   }
 }
 

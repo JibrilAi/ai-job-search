@@ -26,6 +26,7 @@ const profile: Profile = {
   dealbreakers: [],
   eligibility: { citizenshipOrPr: "Danish citizen", visaConstraintsNote: null },
   autoApplyEnabled: false,
+  autoSubmitMode: "off",
   profileVersion: 1,
   updatedAt: new Date().toISOString(),
 }

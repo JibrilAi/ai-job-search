@@ -5,6 +5,11 @@ import type { Env } from "../../../types.js"
 // offer_declined/withdrawn are final.
 export type ApplicationStatus =
   | "drafted"
+  // Set by the freehire.me auto-submit engine's "confirm" mode after it
+  // fills the application form and stops short of the real submit action
+  // -- see lib/documents/autoSubmit.ts. The user sends it themselves from
+  // the tracker (POST /applications/:id/submit).
+  | "ready_to_submit"
   | "applied"
   | "interview"
   | "offer"
