@@ -20,3 +20,15 @@ export async function callLLM(
     return await callGemini(env, args)
   }
 }
+
+/**
+ * True when the final error out of callLLM is a 429 from whichever
+ * provider actually failed last -- both callOpenRouter and callGemini
+ * embed the numeric HTTP status in their thrown message (see
+ * "API request failed: <status> ..." in each). Route handlers use this to
+ * surface a specific "try again shortly" message instead of the same
+ * generic failure text for every kind of error.
+ */
+export function isRateLimitError(err: unknown): boolean {
+  return err instanceof Error && /API request failed: 429\b/.test(err.message)
+}

@@ -217,7 +217,13 @@ export async function extractProfileFromResumeText(env: Env, resumeText: string)
     systemPrompt: SYSTEM_PROMPT,
     userMessage: `Resume text:\n\n${text}`,
     responseSchema: PROFILE_RESPONSE_SCHEMA,
-    maxOutputTokens: 4096,
+    // This is the largest schema of any call site (the whole profile
+    // shape: education/experience arrays, behavioral, motivation, etc.) --
+    // widened from 4096 for the same reason field-suggestion's budget was
+    // widened earlier: Gemini 3.x's mandatory thinkingConfig eats into
+    // maxOutputTokens, and a tight budget here risks the same
+    // truncated-mid-JSON failure already seen and fixed elsewhere.
+    maxOutputTokens: 8192,
   })
 
   return normalizeExtractedProfile(result)

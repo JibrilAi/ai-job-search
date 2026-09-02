@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest"
-import { callLLM } from "../src/lib/llmClient.js"
+import { callLLM, isRateLimitError } from "../src/lib/llmClient.js"
 import type { Env } from "../src/types.js"
 
 const ARGS = {
@@ -52,5 +52,18 @@ describe("callLLM", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     await expect(callLLM(env, ARGS)).rejects.toThrow(/401/)
+  })
+})
+
+describe("isRateLimitError", () => {
+  it("recognizes a 429 from either provider's thrown error message", () => {
+    expect(isRateLimitError(new Error("OpenRouter API request failed: 429 rate limited"))).toBe(true)
+    expect(isRateLimitError(new Error("Gemini API request failed: 429 quota exceeded"))).toBe(true)
+  })
+
+  it("does not match other statuses or non-Error values", () => {
+    expect(isRateLimitError(new Error("OpenRouter API request failed: 402 no credits"))).toBe(false)
+    expect(isRateLimitError("429")).toBe(false)
+    expect(isRateLimitError(null)).toBe(false)
   })
 })

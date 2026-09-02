@@ -5,6 +5,7 @@ import { getProfile, upsertProfile, type ProfileInput } from "../lib/db/reposito
 import { extractPdfText } from "../lib/documents/extractText.js"
 import { extractProfileFromResumeText } from "../lib/profile/resumeExtraction.js"
 import { suggestFieldValue, type FieldType } from "../lib/profile/fieldSuggestion.js"
+import { isRateLimitError } from "../lib/llmClient.js"
 import { suggestScrapeQuery } from "../lib/scrapeQuerySuggestion.js"
 import { getUserScrapeQueries, upsertUserScrapeQuery } from "../lib/db/repositories/scrapeQueries.js"
 import { KEYWORD_SEARCHABLE_PORTALS } from "../lib/scrapers/registry.js"
@@ -51,6 +52,9 @@ profile.post("/resume", async (c) => {
     return c.json({ profile: extracted })
   } catch (err) {
     console.error("resume extraction failed:", err)
+    if (isRateLimitError(err)) {
+      return c.json({ error: "AI providers are rate-limited right now, please try again in a minute or two" }, 429)
+    }
     return c.json({ error: "could not extract a profile from this resume, please fill it in manually" }, 502)
   }
 })
@@ -89,6 +93,9 @@ profile.post("/suggest-field", async (c) => {
     return c.json({ value })
   } catch (err) {
     console.error("field suggestion failed:", err)
+    if (isRateLimitError(err)) {
+      return c.json({ error: "AI providers are rate-limited right now, please try again in a minute or two" }, 429)
+    }
     return c.json({ error: "could not get an AI suggestion for this field" }, 502)
   }
 })

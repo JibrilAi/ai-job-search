@@ -8,6 +8,27 @@ const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 // the Gemini integration (a hardcoded model got deprecated mid-project).
 const OPENROUTER_MODEL = "openrouter/free"
 
+// Same reasoning as callGemini's retry: 429 (rate limit) and 503
+// (transient overload) are worth a couple of retries, anything else
+// (400/401/403/404) won't fix itself. Without this, a single rate-limited
+// request used to throw immediately and push 100% of traffic onto Gemini
+// for the rest of the session the moment OpenRouter's free pool got busy.
+const RETRYABLE_STATUSES = new Set([429, 503])
+const MAX_RETRIES = 2
+const RETRY_BASE_DELAY_MS = 500
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// OpenRouter forwards a standard Retry-After header (seconds) on 429s from
+// some upstream providers -- honor it when present instead of guessing.
+function parseRetryAfterMs(header: string | null): number | null {
+  if (!header) return null
+  const seconds = Number(header)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null
+}
+
 type JsonSchema = {
   type: string
   properties?: Record<string, JsonSchema>
@@ -61,49 +82,57 @@ export async function callOpenRouter(
     )
   }
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
-      "content-type": "application/json",
+  const requestBody = JSON.stringify({
+    model: OPENROUTER_MODEL,
+    max_tokens: args.maxOutputTokens,
+    messages: [
+      { role: "system", content: args.systemPrompt },
+      { role: "user", content: args.userMessage },
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: { name: "response", strict: true, schema: toJsonSchema(responseSchema) },
     },
-    body: JSON.stringify({
-      model: OPENROUTER_MODEL,
-      max_tokens: args.maxOutputTokens,
-      messages: [
-        { role: "system", content: args.systemPrompt },
-        { role: "user", content: args.userMessage },
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "response", strict: true, schema: toJsonSchema(responseSchema) },
-      },
-    }),
   })
 
-  if (!response.ok) {
-    const body = await response.text().catch(() => "")
-    throw new Error(`OpenRouter API request failed: ${response.status} ${body}`)
-  }
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(OPENROUTER_API_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: requestBody,
+    })
 
-  const data = (await response.json()) as { model?: string; choices?: Array<{ message?: { content?: string } }> }
-  const text = data.choices?.[0]?.message?.content
-  if (!text) throw new Error("OpenRouter did not return a response")
+    if (!response.ok) {
+      const body = await response.text().catch(() => "")
+      if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_RETRIES) {
+        await sleep(parseRetryAfterMs(response.headers.get("retry-after")) ?? RETRY_BASE_DELAY_MS * 2 ** attempt)
+        continue
+      }
+      throw new Error(`OpenRouter API request failed: ${response.status} ${body}`)
+    }
 
-  // A model can answer with prose or a ```json fenced block despite
-  // strict structured-output being requested -- strip fencing before
-  // parsing, and surface the model name + raw text on failure so a bad
-  // response is diagnosable from logs instead of a bare SyntaxError.
-  const jsonText = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "")
-  try {
-    const parsed = JSON.parse(jsonText) as unknown
-    // Cheap, always-on diagnostic: which free model actually answered.
-    // Free-model routing means this varies call to call, and knowing
-    // which model produced a given (possibly malformed) result is the
-    // difference between guessing at a fix and actually finding one.
-    console.log(`OpenRouter (${data.model ?? "unknown model"}) responded: ${jsonText.slice(0, 500)}`)
-    return parsed
-  } catch {
-    throw new Error(`OpenRouter (${data.model ?? "unknown model"}) returned unparseable JSON: ${text.slice(0, 500)}`)
+    const data = (await response.json()) as { model?: string; choices?: Array<{ message?: { content?: string } }> }
+    const text = data.choices?.[0]?.message?.content
+    if (!text) throw new Error("OpenRouter did not return a response")
+
+    // A model can answer with prose or a ```json fenced block despite
+    // strict structured-output being requested -- strip fencing before
+    // parsing, and surface the model name + raw text on failure so a bad
+    // response is diagnosable from logs instead of a bare SyntaxError.
+    const jsonText = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "")
+    try {
+      const parsed = JSON.parse(jsonText) as unknown
+      // Cheap, always-on diagnostic: which free model actually answered.
+      // Free-model routing means this varies call to call, and knowing
+      // which model produced a given (possibly malformed) result is the
+      // difference between guessing at a fix and actually finding one.
+      console.log(`OpenRouter (${data.model ?? "unknown model"}) responded: ${jsonText.slice(0, 500)}`)
+      return parsed
+    } catch {
+      throw new Error(`OpenRouter (${data.model ?? "unknown model"}) returned unparseable JSON: ${text.slice(0, 500)}`)
+    }
   }
 }
