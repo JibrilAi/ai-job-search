@@ -234,6 +234,9 @@ export default function ProfileSetup() {
     next[i] = { ...next[i], ...patch }
     setProfile({ ...profile, languages: next })
   }
+  function removeLanguage(i: number) {
+    setProfile((p) => ({ ...p, languages: p.languages.filter((_, idx) => idx !== i) }))
+  }
 
   function addExperience() {
     setProfile((p) => ({
@@ -246,6 +249,9 @@ export default function ProfileSetup() {
     next[i] = { ...next[i], ...patch }
     setProfile({ ...profile, experience: next })
   }
+  function removeExperience(i: number) {
+    setProfile((p) => ({ ...p, experience: p.experience.filter((_, idx) => idx !== i) }))
+  }
 
   function addEducation() {
     setProfile((p) => ({
@@ -257,6 +263,9 @@ export default function ProfileSetup() {
     const next = [...profile.education]
     next[i] = { ...next[i], ...patch }
     setProfile({ ...profile, education: next })
+  }
+  function removeEducation(i: number) {
+    setProfile((p) => ({ ...p, education: p.education.filter((_, idx) => idx !== i) }))
   }
 
   async function runResumeImport(file: File) {
@@ -352,6 +361,19 @@ export default function ProfileSetup() {
                 value={profile.linkedinHeadline ?? ""}
                 onChange={(e) => setProfile({ ...profile, linkedinHeadline: e.target.value })}
               />
+            </div>
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>CV language</label>
+                <AiSuggest
+                  label="CV language"
+                  fieldType="string"
+                  currentValue={profile.cvLanguage ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, cvLanguage: v as string })}
+                />
+              </div>
+              <input value={profile.cvLanguage ?? ""} onChange={(e) => setProfile({ ...profile, cvLanguage: e.target.value })} />
             </div>
             <div className="form-row">
               <div className="field-label-row">
@@ -478,6 +500,9 @@ export default function ProfileSetup() {
                 </div>
                 <input value={lang.level} onChange={(e) => updateLanguage(i, { level: e.target.value })} />
               </div>
+              <button type="button" className="secondary" onClick={() => removeLanguage(i)}>
+                Remove
+              </button>
             </div>
           ))}
           <button type="button" className="secondary" onClick={addLanguage}>
@@ -585,6 +610,55 @@ export default function ProfileSetup() {
                   <input value={exp.company} onChange={(e) => updateExperience(i, { company: e.target.value })} />
                 </div>
               </div>
+              <div className="form-grid">
+                <div className="form-row">
+                  <div className="field-label-row">
+                    <label>Start date</label>
+                    <AiSuggest
+                      label={`Experience ${i + 1} (${exp.title || "untitled"}): start date`}
+                      fieldType="string"
+                      currentValue={exp.startDate ?? ""}
+                      profile={profile}
+                      onApply={(v) => updateExperience(i, { startDate: v as string })}
+                    />
+                  </div>
+                  <input
+                    placeholder="e.g. Jan 2022"
+                    value={exp.startDate ?? ""}
+                    onChange={(e) => updateExperience(i, { startDate: e.target.value })}
+                  />
+                </div>
+                <div className="form-row">
+                  <div className="field-label-row">
+                    <label>End date</label>
+                    <AiSuggest
+                      label={`Experience ${i + 1} (${exp.title || "untitled"}): end date`}
+                      fieldType="string"
+                      currentValue={exp.endDate ?? ""}
+                      profile={profile}
+                      onApply={(v) => updateExperience(i, { endDate: v as string })}
+                    />
+                  </div>
+                  <input
+                    placeholder="e.g. Present"
+                    value={exp.endDate ?? ""}
+                    onChange={(e) => updateExperience(i, { endDate: e.target.value })}
+                  />
+                </div>
+                <div className="form-row">
+                  <div className="field-label-row">
+                    <label>Location</label>
+                    <AiSuggest
+                      label={`Experience ${i + 1} (${exp.title || "untitled"}): location`}
+                      fieldType="string"
+                      currentValue={exp.location ?? ""}
+                      profile={profile}
+                      onApply={(v) => updateExperience(i, { location: v as string })}
+                    />
+                  </div>
+                  <input value={exp.location ?? ""} onChange={(e) => updateExperience(i, { location: e.target.value })} />
+                </div>
+              </div>
               <div className="form-row">
                 <div className="field-label-row">
                   <label>Key bullets (comma-separated)</label>
@@ -598,6 +672,9 @@ export default function ProfileSetup() {
                 </div>
                 <textarea value={csv(exp.bullets)} onChange={(e) => updateExperience(i, { bullets: fromCsv(e.target.value) })} />
               </div>
+              <button type="button" className="secondary" onClick={() => removeExperience(i)}>
+                Remove
+              </button>
             </div>
           ))}
           <button type="button" className="secondary" onClick={addExperience}>
@@ -648,6 +725,61 @@ export default function ProfileSetup() {
                 </div>
                 <input value={ed.institution} onChange={(e) => updateEducation(i, { institution: e.target.value })} />
               </div>
+              <div className="form-row">
+                <div className="field-label-row">
+                  <label>Year started</label>
+                  <AiSuggest
+                    label={`Education ${i + 1} (${ed.degree || "untitled"}): year started`}
+                    fieldType="string"
+                    currentValue={ed.yearStart ?? ""}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { yearStart: v as string })}
+                  />
+                </div>
+                <input value={ed.yearStart ?? ""} onChange={(e) => updateEducation(i, { yearStart: e.target.value })} />
+              </div>
+              <div className="form-row">
+                <div className="field-label-row">
+                  <label>Year ended</label>
+                  <AiSuggest
+                    label={`Education ${i + 1} (${ed.degree || "untitled"}): year ended`}
+                    fieldType="string"
+                    currentValue={ed.yearEnd ?? ""}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { yearEnd: v as string })}
+                  />
+                </div>
+                <input value={ed.yearEnd ?? ""} onChange={(e) => updateEducation(i, { yearEnd: e.target.value })} />
+              </div>
+              <div className="form-row">
+                <div className="field-label-row">
+                  <label>Thesis title</label>
+                  <AiSuggest
+                    label={`Education ${i + 1} (${ed.degree || "untitled"}): thesis title`}
+                    fieldType="string"
+                    currentValue={ed.thesis ?? ""}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { thesis: v as string })}
+                  />
+                </div>
+                <input value={ed.thesis ?? ""} onChange={(e) => updateEducation(i, { thesis: e.target.value })} />
+              </div>
+              <div className="form-row">
+                <div className="field-label-row">
+                  <label>Key topics (comma-separated)</label>
+                  <AiSuggest
+                    label={`Education ${i + 1} (${ed.degree || "untitled"}): key topics`}
+                    fieldType="string"
+                    currentValue={ed.topics ?? ""}
+                    profile={profile}
+                    onApply={(v) => updateEducation(i, { topics: v as string })}
+                  />
+                </div>
+                <input value={ed.topics ?? ""} onChange={(e) => updateEducation(i, { topics: e.target.value })} />
+              </div>
+              <button type="button" className="secondary" onClick={() => removeEducation(i)}>
+                Remove
+              </button>
             </div>
           ))}
           <button type="button" className="secondary" onClick={addEducation}>
