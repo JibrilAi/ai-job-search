@@ -136,14 +136,25 @@ git-integration auto-deploy configured in the Cloudflare dashboard.
 
 ## Known limitations / open risks
 
-- Only the `freehire` portal is wired up. Adding another portal means writing
-  `worker/src/lib/scrapers/<portal>.ts` (same `PortalScraper` interface) and
-  registering it in `worker/src/lib/scrapers/registry.ts`. LinkedIn is
-  deliberately deferred -- see the plan's risk notes on scraping-at-scale.
-  This sandbox's network policy blocked outbound requests to freehire.me
-  directly, so the scraper's actual HTTP call is unverified here (the
-  Cron/Queue/dedupe mechanics around it are); test it against the real API
-  before relying on it.
+- Four portals are wired up: `freehire`, `linkedin`, `greenhouse`, and
+  `lever`. Adding another means writing `worker/src/lib/scrapers/<portal>.ts`
+  (same `PortalScraper` interface) and registering it in
+  `worker/src/lib/scrapers/registry.ts`. This sandbox's network policy
+  blocks outbound requests to freehire.me, boards-api.greenhouse.io, and
+  api.lever.co directly, so none of these scrapers' actual HTTP calls are
+  verified here (the Cron/Queue/dedupe mechanics around them are); test
+  against the real APIs before relying on them.
+- `greenhouse`/`lever` are structured differently from the other two:
+  Greenhouse and Lever are per-company job boards with no "search
+  everything" endpoint, so their `scrape_queries.query_json`'s `query`
+  field is a comma-separated list of company board tokens/slugs (not a
+  free-text keyword) -- see the comment at the top of
+  `worker/src/lib/scrapers/greenhouse.ts`. They're deliberately excluded
+  from `KEYWORD_SEARCHABLE_PORTALS` for this reason. `migrations/
+  0011_greenhouse_lever_seed.sql` seeds a starter list of company tokens
+  that is best-effort/unverified (same network restriction as above) --
+  confirm which actually resolve and swap in real ones relevant to your
+  users.
 - Magic-link/password-reset email falls back to `console.log` when
   `RESEND_API_KEY` is unset (see `worker/src/lib/auth/email.ts`) -- fine for
   dev, but needs a real Resend account + verified sending domain before
