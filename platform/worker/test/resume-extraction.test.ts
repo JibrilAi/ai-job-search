@@ -105,6 +105,32 @@ describe("normalizeExtractedProfile", () => {
     expect(profile.experience).toEqual([])
     expect(profile.targetSectors).toEqual([])
   })
+
+  it("drops malformed (non-object) experience/education/language entries instead of turning them into blank rows", () => {
+    const profile = normalizeExtractedProfile({
+      experience: ["just a string", 42, null, { title: "Engineer", company: "Acme", bullets: ["did stuff"] }],
+      education: ["also a string", { degree: "BSc", field: "CS", institution: "U of T" }],
+      languages: [null, { language: "English", level: "Native" }],
+    })
+    expect(profile.experience).toEqual([{ title: "Engineer", startDate: undefined, endDate: undefined, company: "Acme", location: undefined, bullets: ["did stuff"] }])
+    expect(profile.education).toHaveLength(1)
+    expect(profile.education[0].degree).toBe("BSc")
+    expect(profile.languages).toEqual([{ language: "English", level: "Native" }])
+  })
+
+  it("drops an experience entry with neither title nor company, even if bullets picked up stray text", () => {
+    const profile = normalizeExtractedProfile({
+      experience: [{ title: "", company: "", bullets: ["orphaned bullet"] }],
+    })
+    expect(profile.experience).toEqual([])
+  })
+
+  it("wraps a bare-string bullets value into a one-element array instead of losing it", () => {
+    const profile = normalizeExtractedProfile({
+      experience: [{ title: "Engineer", company: "Acme", bullets: "Single bullet as a string" }],
+    })
+    expect(profile.experience[0].bullets).toEqual(["Single bullet as a string"])
+  })
 })
 
 describe("extractProfileFromResumeText", () => {
@@ -142,5 +168,44 @@ describe("extractProfileFromResumeText", () => {
     vi.stubGlobal("fetch", fetchMock)
 
     await expect(extractProfileFromResumeText(env, "unreadable garbage text")).rejects.toThrow(/no usable data/)
+  })
+
+  it("retries against Gemini for experience specifically when other fields succeeded but experience came back empty, keeping the primary provider's other fields", async () => {
+    const primaryNoExperience = { ...REAL_EXTRACTION, experience: [] }
+    const geminiExperienceOnly = {
+      ...EMPTY_EXTRACTION,
+      name: "Someone Else",
+      experience: [{ title: "Designer", company: "Widgets Inc", bullets: ["Designed widgets"] }],
+    }
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("openrouter.ai")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(primaryNoExperience) } }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(geminiExperienceOnly) }] } }] }), { status: 200 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const profile = await extractProfileFromResumeText(env, "Jane Doe, Software Engineer at Acme...")
+
+    expect(profile.name).toBe("Jane Doe")
+    expect(profile.experience).toEqual([{ title: "Designer", startDate: undefined, endDate: undefined, company: "Widgets Inc", location: undefined, bullets: ["Designed widgets"] }])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not throw when experience stays empty on both providers, as long as other fields succeeded (a genuinely experience-free resume)", async () => {
+    const noExperienceButOtherwiseReal = { ...REAL_EXTRACTION, experience: [] }
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("openrouter.ai")) {
+        return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(noExperienceButOtherwiseReal) } }] }), { status: 200 })
+      }
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(noExperienceButOtherwiseReal) }] } }] }), { status: 200 })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const profile = await extractProfileFromResumeText(env, "Jane Doe, recent graduate, no work history yet...")
+
+    expect(profile.name).toBe("Jane Doe")
+    expect(profile.experience).toEqual([])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

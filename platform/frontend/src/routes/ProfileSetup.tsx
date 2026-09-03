@@ -40,12 +40,72 @@ function fromCsv(value: string): string[] {
     .filter(Boolean)
 }
 
-// Fills gaps in the current form from an AI-extracted resume without
-// clobbering fields the user already typed in -- a field only wins if the
-// current value is empty and the extracted one isn't.
+// Appends incoming items not already present (trimmed, case-insensitive
+// compare), keeping current's items and order first. Used for merging a
+// resume-extracted list into the form without dropping the other side or
+// duplicating entries the user already has.
+function mergeStringArray(current: string[], incoming: string[]): string[] {
+  const seen = new Set(current.map((s) => s.trim().toLowerCase()))
+  const additions = incoming.filter((s) => s.trim() && !seen.has(s.trim().toLowerCase()))
+  return [...current, ...additions]
+}
+
+// Same idea as mergeStringArray but for object-array fields (experience,
+// education, languages), where "duplicate" means "same real-world item,"
+// not "identical object" -- keyOf picks the fields that identify that and
+// returns "" for a blank/unfilled entry. A blank entry in `current` (e.g.
+// an unfilled row from clicking "+ Add experience" before importing) is
+// dropped rather than kept alongside the real, imported entries.
+function mergeObjectArray<T>(current: T[], incoming: T[], keyOf: (item: T) => string): T[] {
+  const kept = current.filter((item) => keyOf(item) !== "")
+  const seen = new Set(kept.map(keyOf))
+  const additions = incoming.filter((item) => {
+    const key = keyOf(item)
+    return key !== "" && !seen.has(key)
+  })
+  return [...kept, ...additions]
+}
+// Each key function returns "" when the item is blank on the fields that
+// identify it, so mergeObjectArray's `key !== ""` guard drops it rather
+// than treating "two blank entries" as a matching pair.
+const experienceKey = (e: ProfileInput["experience"][number]) => {
+  const title = e.title.trim().toLowerCase()
+  const company = e.company.trim().toLowerCase()
+  return title || company ? `${title}|${company}` : ""
+}
+const educationKey = (e: ProfileInput["education"][number]) => {
+  const degree = e.degree.trim().toLowerCase()
+  const institution = e.institution.trim().toLowerCase()
+  return degree || institution ? `${degree}|${institution}` : ""
+}
+const languageKey = (l: ProfileInput["languages"][number]) => l.language.trim().toLowerCase()
+
+// A successful (HTTP 200) import with an empty/reduced extraction looks
+// identical in the UI to "the user hasn't filled this in yet" unless we
+// say what was actually found -- built from the raw extraction, not the
+// merged result, so the counts reflect what this resume actually had.
+function summarizeImport(extracted: ProfileInput): string {
+  const parts = [
+    `${extracted.experience.length} experience ${extracted.experience.length === 1 ? "entry" : "entries"}`,
+    `${extracted.education.length} education ${extracted.education.length === 1 ? "entry" : "entries"}`,
+    `${extracted.skills.primary.length} skill${extracted.skills.primary.length === 1 ? "" : "s"}`,
+  ]
+  let summary = `Imported ${parts.join(", ")}.`
+  if (extracted.experience.length === 0) {
+    summary += " No work experience was found in this resume -- add it manually below if that's unexpected."
+  }
+  return summary
+}
+
+// Merges an AI-extracted resume into the current form without clobbering
+// anything the user already typed in: a scalar field only wins if the
+// current value is empty and the extracted one isn't; a list field keeps
+// every current entry and appends any extracted entries that aren't
+// already present (by a per-field dedup key), rather than picking one
+// array over the other wholesale -- see mergeStringArray/mergeObjectArray.
 function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInput {
   const str = (a: string | null, b: string | null) => a || b
-  const arr = <T,>(a: T[], b: T[]) => (a.length ? a : b)
+  const arr = mergeStringArray
   return {
     name: str(current.name, incoming.name),
     city: str(current.city, incoming.city),
@@ -59,9 +119,9 @@ function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInp
     relocationWillingness: str(current.relocationWillingness, incoming.relocationWillingness),
     workArrangementPreference: str(current.workArrangementPreference, incoming.workArrangementPreference),
     portfolioUrl: str(current.portfolioUrl, incoming.portfolioUrl),
-    languages: arr(current.languages, incoming.languages),
-    education: arr(current.education, incoming.education),
-    experience: arr(current.experience, incoming.experience),
+    languages: mergeObjectArray(current.languages, incoming.languages, languageKey),
+    education: mergeObjectArray(current.education, incoming.education, educationKey),
+    experience: mergeObjectArray(current.experience, incoming.experience, experienceKey),
     skills: {
       primary: arr(current.skills.primary, incoming.skills.primary),
       secondary: arr(current.skills.secondary, incoming.skills.secondary),
@@ -166,6 +226,7 @@ export default function ProfileSetup() {
   const [saved, setSaved] = useState(false)
   const [importing, setImporting] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
+  const [importSummary, setImportSummary] = useState<string | null>(null)
   const [resumeFile, setResumeFile] = useState<File | null>(null)
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -281,10 +342,12 @@ export default function ProfileSetup() {
   async function runResumeImport(file: File) {
     setImporting(true)
     setImportError(null)
+    setImportSummary(null)
     try {
       const { profile: extracted } = await profileApi.importResume(file)
       setProfile((current) => mergeProfile(current, extracted))
       setResumeFile(null)
+      setImportSummary(summarizeImport(extracted))
     } catch (err) {
       setImportError(err instanceof ApiError ? err.message : "Could not import that resume.")
     } finally {
@@ -336,6 +399,9 @@ export default function ProfileSetup() {
               </button>
             )}
           </div>
+        )}
+        {importSummary && !importing && (
+          <p className="muted inline-status">{importSummary}</p>
         )}
       </div>
 

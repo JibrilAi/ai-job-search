@@ -7,7 +7,7 @@ import { callGemini } from "../geminiClient.js"
 // unusually large PDF rather than truncating any real resume's content.
 const MAX_RESUME_CHARS = 20_000
 
-const SYSTEM_PROMPT = `You extract a structured candidate profile from resume text, for prefilling a job-search profile form. Only include information explicitly present in the text -- never invent employers, dates, skills, or achievements. Leave a field empty (empty string, empty array, or null) when the resume doesn't state it. A resume rarely states things like target sectors, deal-breakers, energizing/draining tasks, notice period, salary expectation, relocation willingness, or work arrangement preference -- leave those empty unless genuinely explicit. portfolioUrl means a personal website, GitHub, or portfolio link (not the LinkedIn URL, which goes in linkedinHeadline's context, not here) -- only fill it if such a URL literally appears in the text.`
+const SYSTEM_PROMPT = `You extract a structured candidate profile from resume text, for prefilling a job-search profile form. Only include information explicitly present in the text -- never invent employers, dates, skills, or achievements. Leave a field empty (empty string, empty array, or null) when the resume doesn't state it. A resume rarely states things like target sectors, deal-breakers, energizing/draining tasks, notice period, salary expectation, relocation willingness, or work arrangement preference -- leave those empty unless genuinely explicit. portfolioUrl means a personal website, GitHub, or portfolio link (not the LinkedIn URL, which goes in linkedinHeadline's context, not here) -- only fill it if such a URL literally appears in the text. For experience entries: use the resume's literal date text for startDate/endDate; if a role is current/ongoing, endDate should be the word "Present", never blank or guessed. Keep company (the employer name) and location (city/region) separate even when the resume lists them together on one line (e.g. "Acme Inc. -- Toronto, ON") -- never put location text into company or vice versa. Split each role's bullets into one array element per distinct line the resume already delimits (by bullet character or line break), not one combined paragraph and not invented sub-splits. If someone held multiple distinct titles or date ranges at the same company (e.g. a promotion), emit one experience entry per title/date range rather than merging them into one.`
 
 const PROFILE_RESPONSE_SCHEMA = {
   type: "OBJECT",
@@ -142,6 +142,16 @@ function strOrNull(v: unknown): string | null {
 function strArray(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []
 }
+// The schema declares bullets as an array of strings, but a free-tier
+// model occasionally returns a single bullet as a bare string instead of
+// a 1-element array -- strArray() would silently drop that content to []
+// rather than keep it, so wrap a bare string before falling through.
+function bulletsOf(v: unknown): string[] {
+  return strArray(typeof v === "string" ? [v] : v)
+}
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+}
 
 /** Defensive normalization of Gemini's response into a well-formed ProfileInput, tolerating a field the model omitted despite the schema. */
 export function normalizeExtractedProfile(value: unknown): ProfileInput {
@@ -165,34 +175,37 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
     workArrangementPreference: strOrNull(v.workArrangementPreference),
     portfolioUrl: strOrNull(v.portfolioUrl),
     languages: Array.isArray(v.languages)
-      ? v.languages.map((l) => ({ language: str((l as Record<string, unknown>)?.language), level: str((l as Record<string, unknown>)?.level) }))
+      ? v.languages.filter(isPlainObject).map((r) => ({ language: str(r.language), level: str(r.level) }))
       : [],
     education: Array.isArray(v.education)
-      ? v.education.map((e) => {
-          const r = e as Record<string, unknown>
-          return {
-            degree: str(r?.degree),
-            field: str(r?.field),
-            yearStart: typeof r?.yearStart === "string" ? r.yearStart : undefined,
-            yearEnd: typeof r?.yearEnd === "string" ? r.yearEnd : undefined,
-            institution: str(r?.institution),
-            thesis: typeof r?.thesis === "string" ? r.thesis : undefined,
-            topics: typeof r?.topics === "string" ? r.topics : undefined,
-          }
-        })
+      ? v.education.filter(isPlainObject).map((r) => ({
+          degree: str(r.degree),
+          field: str(r.field),
+          yearStart: typeof r.yearStart === "string" ? r.yearStart : undefined,
+          yearEnd: typeof r.yearEnd === "string" ? r.yearEnd : undefined,
+          institution: str(r.institution),
+          thesis: typeof r.thesis === "string" ? r.thesis : undefined,
+          topics: typeof r.topics === "string" ? r.topics : undefined,
+        }))
       : [],
+    // Non-object elements (a garbled string/number/null the model
+    // returned in place of a real entry) are dropped rather than coerced
+    // into a blank placeholder row that would otherwise still occupy a
+    // slot in the profile's experience list. An entry that ends up with
+    // neither a title nor a company after normalization is dropped too --
+    // it isn't a placeable row even if bullets picked up stray text.
     experience: Array.isArray(v.experience)
-      ? v.experience.map((e) => {
-          const r = e as Record<string, unknown>
-          return {
-            title: str(r?.title),
-            startDate: typeof r?.startDate === "string" ? r.startDate : undefined,
-            endDate: typeof r?.endDate === "string" ? r.endDate : undefined,
-            company: str(r?.company),
-            location: typeof r?.location === "string" ? r.location : undefined,
-            bullets: strArray(r?.bullets),
-          }
-        })
+      ? v.experience
+          .filter(isPlainObject)
+          .map((r) => ({
+            title: str(r.title),
+            startDate: typeof r.startDate === "string" ? r.startDate : undefined,
+            endDate: typeof r.endDate === "string" ? r.endDate : undefined,
+            company: str(r.company),
+            location: typeof r.location === "string" ? r.location : undefined,
+            bullets: bulletsOf(r.bullets),
+          }))
+          .filter((e) => e.title.trim() || e.company.trim())
       : [],
     skills: {
       primary: strArray(skills.primary),
@@ -240,6 +253,16 @@ function isEmptyExtraction(profile: ProfileInput): boolean {
   return !profile.name && profile.experience.length === 0 && profile.education.length === 0 && profile.skills.primary.length === 0
 }
 
+// experience is the deepest/most schema-fragile part of PROFILE_RESPONSE_SCHEMA
+// (see the file-level comment above isEmptyExtraction), so it's the field
+// most likely to come back empty/garbled even when the rest of the
+// extraction succeeded -- isEmptyExtraction's all-four-empty check misses
+// that case entirely, since name/education/skills can all be fine while
+// experience alone is not.
+function experienceLooksEmpty(profile: ProfileInput): boolean {
+  return profile.experience.length === 0
+}
+
 export async function extractProfileFromResumeText(env: Env, resumeText: string): Promise<ProfileInput> {
   const text = resumeText.slice(0, MAX_RESUME_CHARS)
   const args = {
@@ -256,16 +279,29 @@ export async function extractProfileFromResumeText(env: Env, resumeText: string)
   }
 
   const primary = normalizeExtractedProfile(await callLLM(env, args))
-  if (!isEmptyExtraction(primary)) return primary
 
-  // callLLM's OpenRouter->Gemini fallback only triggers when OpenRouter
-  // throws -- a parseable-but-empty/wrong-shaped response doesn't throw,
-  // so it never reaches that fallback on its own. Retry directly against
-  // Gemini here, the same recovery callLLM would have done had OpenRouter
-  // actually failed loudly.
-  console.warn("resume extraction: primary provider returned an empty profile, retrying directly against Gemini")
-  const fallback = normalizeExtractedProfile(await callGemini(env, args))
-  if (!isEmptyExtraction(fallback)) return fallback
+  if (isEmptyExtraction(primary)) {
+    // callLLM's OpenRouter->Gemini fallback only triggers when OpenRouter
+    // throws -- a parseable-but-empty/wrong-shaped response doesn't throw,
+    // so it never reaches that fallback on its own. Retry directly against
+    // Gemini here, the same recovery callLLM would have done had
+    // OpenRouter actually failed loudly.
+    console.warn("resume extraction: primary provider returned an empty profile, retrying directly against Gemini")
+    const fallback = normalizeExtractedProfile(await callGemini(env, args))
+    if (!isEmptyExtraction(fallback)) return fallback
+    throw new Error("resume extraction produced no usable data from either provider")
+  }
 
-  throw new Error("resume extraction produced no usable data from either provider")
+  if (experienceLooksEmpty(primary)) {
+    // The rest of the extraction worked, so this isn't the "nothing came
+    // back" case above -- just retry for experience specifically and keep
+    // every other already-good field from primary. If Gemini's retry is
+    // also empty, don't throw: a genuinely experience-free resume (e.g. a
+    // new graduate) is a legitimate result, not a failure.
+    console.warn("resume extraction: primary provider returned no experience entries though other fields succeeded, retrying directly against Gemini")
+    const fallback = normalizeExtractedProfile(await callGemini(env, args))
+    if (!experienceLooksEmpty(fallback)) return { ...primary, experience: fallback.experience }
+  }
+
+  return primary
 }
