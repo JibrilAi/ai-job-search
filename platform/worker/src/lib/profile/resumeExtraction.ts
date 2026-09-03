@@ -7,7 +7,7 @@ import { callGemini } from "../geminiClient.js"
 // unusually large PDF rather than truncating any real resume's content.
 const MAX_RESUME_CHARS = 20_000
 
-const SYSTEM_PROMPT = `You extract a structured candidate profile from resume text, for prefilling a job-search profile form. Only include information explicitly present in the text -- never invent employers, dates, skills, or achievements. Leave a field empty (empty string, empty array, or null) when the resume doesn't state it. A resume rarely states things like target sectors, deal-breakers, or energizing/draining tasks -- leave those empty unless genuinely explicit.`
+const SYSTEM_PROMPT = `You extract a structured candidate profile from resume text, for prefilling a job-search profile form. Only include information explicitly present in the text -- never invent employers, dates, skills, or achievements. Leave a field empty (empty string, empty array, or null) when the resume doesn't state it. A resume rarely states things like target sectors, deal-breakers, energizing/draining tasks, notice period, salary expectation, relocation willingness, or work arrangement preference -- leave those empty unless genuinely explicit. portfolioUrl means a personal website, GitHub, or portfolio link (not the LinkedIn URL, which goes in linkedinHeadline's context, not here) -- only fill it if such a URL literally appears in the text.`
 
 const PROFILE_RESPONSE_SCHEMA = {
   type: "OBJECT",
@@ -19,6 +19,11 @@ const PROFILE_RESPONSE_SCHEMA = {
     cvLanguage: { type: "STRING", nullable: true },
     employmentStatus: { type: "STRING", nullable: true },
     linkedinHeadline: { type: "STRING", nullable: true },
+    noticePeriod: { type: "STRING", nullable: true },
+    salaryExpectation: { type: "STRING", nullable: true },
+    relocationWillingness: { type: "STRING", nullable: true },
+    workArrangementPreference: { type: "STRING", nullable: true },
+    portfolioUrl: { type: "STRING", nullable: true },
     languages: {
       type: "ARRAY",
       items: {
@@ -108,6 +113,11 @@ const PROFILE_RESPONSE_SCHEMA = {
     "cvLanguage",
     "employmentStatus",
     "linkedinHeadline",
+    "noticePeriod",
+    "salaryExpectation",
+    "relocationWillingness",
+    "workArrangementPreference",
+    "portfolioUrl",
     "languages",
     "education",
     "experience",
@@ -149,6 +159,11 @@ export function normalizeExtractedProfile(value: unknown): ProfileInput {
     cvLanguage: strOrNull(v.cvLanguage),
     employmentStatus: strOrNull(v.employmentStatus),
     linkedinHeadline: strOrNull(v.linkedinHeadline),
+    noticePeriod: strOrNull(v.noticePeriod),
+    salaryExpectation: strOrNull(v.salaryExpectation),
+    relocationWillingness: strOrNull(v.relocationWillingness),
+    workArrangementPreference: strOrNull(v.workArrangementPreference),
+    portfolioUrl: strOrNull(v.portfolioUrl),
     languages: Array.isArray(v.languages)
       ? v.languages.map((l) => ({ language: str((l as Record<string, unknown>)?.language), level: str((l as Record<string, unknown>)?.level) }))
       : [],

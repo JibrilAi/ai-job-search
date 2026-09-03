@@ -67,6 +67,16 @@ export interface Profile {
   cvLanguage: string | null
   employmentStatus: string | null
   linkedinHeadline: string | null
+  // Common application-screener fields (LinkedIn Easy Apply / Indeed /
+  // Greenhouse / Lever / Workday all ask some version of these) that this
+  // profile didn't previously capture. Deliberately does NOT include
+  // EEO/demographic fields (race, gender, veteran status, disability) --
+  // see lib/documents/autoSubmit.ts's FIELD_KEYWORDS comment for why.
+  noticePeriod: string | null
+  salaryExpectation: string | null
+  relocationWillingness: string | null
+  workArrangementPreference: string | null
+  portfolioUrl: string | null
   languages: LanguageEntry[]
   education: EducationEntry[]
   experience: ExperienceEntry[]
@@ -98,6 +108,11 @@ interface ProfileRow {
   cvLanguage: string | null
   employmentStatus: string | null
   linkedinHeadline: string | null
+  noticePeriod: string | null
+  salaryExpectation: string | null
+  relocationWillingness: string | null
+  workArrangementPreference: string | null
+  portfolioUrl: string | null
   languagesJson: string
   educationJson: string
   experienceJson: string
@@ -126,6 +141,11 @@ function rowToProfile(row: ProfileRow): Profile {
     cvLanguage: row.cvLanguage,
     employmentStatus: row.employmentStatus,
     linkedinHeadline: row.linkedinHeadline,
+    noticePeriod: row.noticePeriod,
+    salaryExpectation: row.salaryExpectation,
+    relocationWillingness: row.relocationWillingness,
+    workArrangementPreference: row.workArrangementPreference,
+    portfolioUrl: row.portfolioUrl,
     languages: JSON.parse(row.languagesJson),
     education: JSON.parse(row.educationJson),
     experience: JSON.parse(row.experienceJson),
@@ -149,7 +169,10 @@ export async function getProfile(env: Env, userId: string): Promise<Profile | nu
   const row = await env.DB.prepare(
     `SELECT user_id as userId, name, city, country, commute_constraints as commuteConstraints,
             cv_language as cvLanguage, employment_status as employmentStatus,
-            linkedin_headline as linkedinHeadline, languages_json as languagesJson,
+            linkedin_headline as linkedinHeadline, notice_period as noticePeriod,
+            salary_expectation as salaryExpectation, relocation_willingness as relocationWillingness,
+            work_arrangement_preference as workArrangementPreference, portfolio_url as portfolioUrl,
+            languages_json as languagesJson,
             education_json as educationJson, experience_json as experienceJson,
             skills_json as skillsJson, certifications_json as certificationsJson,
             publications_json as publicationsJson, awards_json as awardsJson,
@@ -176,15 +199,19 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
   await env.DB.prepare(
     `INSERT INTO profiles (
        user_id, name, city, country, commute_constraints, cv_language, employment_status,
-       linkedin_headline, languages_json, education_json, experience_json, skills_json,
+       linkedin_headline, notice_period, salary_expectation, relocation_willingness,
+       work_arrangement_preference, portfolio_url, languages_json, education_json, experience_json, skills_json,
        certifications_json, publications_json, awards_json, behavioral_json, motivation_json,
        target_sectors_json, dealbreakers_json, eligibility_json, auto_apply_enabled,
        auto_submit_mode, profile_version, updated_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        name = excluded.name, city = excluded.city, country = excluded.country,
        commute_constraints = excluded.commute_constraints, cv_language = excluded.cv_language,
        employment_status = excluded.employment_status, linkedin_headline = excluded.linkedin_headline,
+       notice_period = excluded.notice_period, salary_expectation = excluded.salary_expectation,
+       relocation_willingness = excluded.relocation_willingness,
+       work_arrangement_preference = excluded.work_arrangement_preference, portfolio_url = excluded.portfolio_url,
        languages_json = excluded.languages_json, education_json = excluded.education_json,
        experience_json = excluded.experience_json, skills_json = excluded.skills_json,
        certifications_json = excluded.certifications_json, publications_json = excluded.publications_json,
@@ -203,6 +230,11 @@ export async function upsertProfile(env: Env, userId: string, input: ProfileInpu
       input.cvLanguage,
       input.employmentStatus,
       input.linkedinHeadline,
+      input.noticePeriod,
+      input.salaryExpectation,
+      input.relocationWillingness,
+      input.workArrangementPreference,
+      input.portfolioUrl,
       JSON.stringify(input.languages ?? []),
       JSON.stringify(input.education ?? []),
       JSON.stringify(input.experience ?? []),

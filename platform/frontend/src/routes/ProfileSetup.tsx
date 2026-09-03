@@ -9,6 +9,11 @@ const EMPTY_PROFILE: ProfileInput = {
   cvLanguage: "English",
   employmentStatus: "",
   linkedinHeadline: "",
+  noticePeriod: "",
+  salaryExpectation: "",
+  relocationWillingness: "",
+  workArrangementPreference: "",
+  portfolioUrl: "",
   languages: [],
   education: [],
   experience: [],
@@ -49,6 +54,11 @@ function mergeProfile(current: ProfileInput, incoming: ProfileInput): ProfileInp
     cvLanguage: str(current.cvLanguage, incoming.cvLanguage),
     employmentStatus: str(current.employmentStatus, incoming.employmentStatus),
     linkedinHeadline: str(current.linkedinHeadline, incoming.linkedinHeadline),
+    noticePeriod: str(current.noticePeriod, incoming.noticePeriod),
+    salaryExpectation: str(current.salaryExpectation, incoming.salaryExpectation),
+    relocationWillingness: str(current.relocationWillingness, incoming.relocationWillingness),
+    workArrangementPreference: str(current.workArrangementPreference, incoming.workArrangementPreference),
+    portfolioUrl: str(current.portfolioUrl, incoming.portfolioUrl),
     languages: arr(current.languages, incoming.languages),
     education: arr(current.education, incoming.education),
     experience: arr(current.experience, incoming.experience),
@@ -466,6 +476,97 @@ export default function ProfileSetup() {
                   setProfile({ ...profile, eligibility: { ...profile.eligibility, visaConstraintsNote: e.target.value } })
                 }
               />
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <h3>Application preferences</h3>
+          <p className="muted">
+            Common screener questions real job applications ask (LinkedIn, Indeed, Greenhouse, Lever, Workday) --
+            filling these in lets AI-suggest and the auto-submit engine answer them for you.
+          </p>
+          <div className="form-grid">
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>Notice period / earliest start date</label>
+                <AiSuggest
+                  label="Notice period / earliest start date"
+                  fieldType="string"
+                  currentValue={profile.noticePeriod ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, noticePeriod: v as string })}
+                />
+              </div>
+              <input
+                placeholder="e.g. 2 weeks, Immediately available"
+                value={profile.noticePeriod ?? ""}
+                onChange={(e) => setProfile({ ...profile, noticePeriod: e.target.value })}
+              />
+            </div>
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>Salary expectation</label>
+                <AiSuggest
+                  label="Salary expectation"
+                  fieldType="string"
+                  currentValue={profile.salaryExpectation ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, salaryExpectation: v as string })}
+                />
+              </div>
+              <input
+                placeholder="e.g. $120,000-$140,000 CAD"
+                value={profile.salaryExpectation ?? ""}
+                onChange={(e) => setProfile({ ...profile, salaryExpectation: e.target.value })}
+              />
+            </div>
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>Willingness to relocate</label>
+                <AiSuggest
+                  label="Willingness to relocate"
+                  fieldType="string"
+                  currentValue={profile.relocationWillingness ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, relocationWillingness: v as string })}
+                />
+              </div>
+              <input
+                placeholder="e.g. Open to relocating within Canada"
+                value={profile.relocationWillingness ?? ""}
+                onChange={(e) => setProfile({ ...profile, relocationWillingness: e.target.value })}
+              />
+            </div>
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>Remote / hybrid / onsite preference</label>
+                <AiSuggest
+                  label="Remote / hybrid / onsite preference"
+                  fieldType="string"
+                  currentValue={profile.workArrangementPreference ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, workArrangementPreference: v as string })}
+                />
+              </div>
+              <input
+                placeholder="e.g. Remote preferred, open to hybrid"
+                value={profile.workArrangementPreference ?? ""}
+                onChange={(e) => setProfile({ ...profile, workArrangementPreference: e.target.value })}
+              />
+            </div>
+            <div className="form-row">
+              <div className="field-label-row">
+                <label>Portfolio / GitHub / personal website</label>
+                <AiSuggest
+                  label="Portfolio / GitHub / personal website"
+                  fieldType="string"
+                  currentValue={profile.portfolioUrl ?? ""}
+                  profile={profile}
+                  onApply={(v) => setProfile({ ...profile, portfolioUrl: v as string })}
+                />
+              </div>
+              <input value={profile.portfolioUrl ?? ""} onChange={(e) => setProfile({ ...profile, portfolioUrl: e.target.value })} />
             </div>
           </div>
         </div>

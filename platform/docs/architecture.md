@@ -130,6 +130,23 @@ always stop at drafting. This repo's sandbox cannot reach freehire.me to
 verify the automation's selectors against the real site -- treat it as a
 first attempt pending real-world testing, not a finished integration.
 
+`autoSubmit.ts`'s `FIELD_KEYWORDS` covers common application-screener
+questions researched across LinkedIn/Indeed/Greenhouse/Lever/Workday
+(notice period, salary expectation, relocation willingness, remote/hybrid/
+onsite preference, portfolio/GitHub URL, work authorization, sponsorship
+needs) mapped to the matching `profiles` columns added in
+`migrations/0013_profile_application_fields.sql`. It deliberately excludes
+EEO/voluntary-self-identification questions (race, gender, veteran status,
+disability) via `NEVER_FILL_KEYWORDS` -- an active skip, not just an
+absent category -- so the automation can never answer on a candidate's
+behalf on those, even if a label would otherwise coincidentally match.
+
+`applications.approved_cv_document_id`/`approved_cover_letter_document_id`
+(migration `0012`) pin the exact documents reviewed at the moment an
+application reaches `ready_to_submit`; `POST /applications/:id/submit`
+sends those, not whatever's currently attached to the application, so a
+later document regeneration can never silently change what gets sent.
+
 ## What's deliberately not built yet
 
 - The four Danish portals' scrapers (jobbank/jobdanmark/jobindex/jobnet) --

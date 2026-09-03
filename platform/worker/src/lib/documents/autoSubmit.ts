@@ -21,18 +21,59 @@ import type { GeneratedDocumentRow } from "../db/repositories/documents.js"
  * iteration against the real site, the same way the AI-suggest fixes did.
  */
 
+// Categories and label-phrasing synonyms come from researching how
+// LinkedIn Easy Apply, Indeed, and the major ATS platforms (Greenhouse,
+// Lever, Workday, iCIMS, SmartRecruiters) phrase common screener
+// questions -- see the profile fields these map to in
+// lib/db/repositories/profiles.ts.
 const FIELD_KEYWORDS = {
   name: ["full name", "your name", "applicant name", "name"],
   email: ["email"],
   phone: ["phone", "mobile", "telephone"],
   resume: ["resume", "cv", "curriculum vitae"],
   coverLetter: ["cover letter", "cover note", "motivation letter"],
+  noticePeriod: ["notice period", "earliest start date", "when can you start", "start date", "availability"],
+  salaryExpectation: ["salary expectation", "expected compensation", "desired salary", "compensation range", "expected salary"],
+  relocation: ["willing to relocate", "relocation assistance", "willingness to relocate"],
+  workArrangement: ["remote/hybrid/onsite", "remote, hybrid, or onsite", "work arrangement", "work location preference"],
+  portfolio: ["portfolio", "github", "personal website", "work samples"],
+  workAuthorization: ["authorized to work", "legally eligible to work", "eligible to work in", "right to work", "work authorization"],
+  sponsorship: ["require sponsorship", "visa sponsorship", "immigration sponsorship", "commence an immigration case"],
 } as const
 
 export type FieldCategory = keyof typeof FIELD_KEYWORDS
 
-/** Pure, unit-testable: classifies a form field's best-guess label text into one of the categories above, longest/most-specific keyword wins. */
+// EEO/voluntary-self-identification fields (race, ethnicity, gender,
+// veteran status, disability) are never auto-filled or guessed, full
+// stop -- every platform researched treats these as legally voluntary and
+// separate from the rest of the application. This is an active
+// exclusion, not just an absent category: a field whose label matches any
+// of these is skipped even if it would otherwise coincidentally match
+// something in FIELD_KEYWORDS above, so the automation can never
+// accidentally answer on a candidate's behalf. See
+// migrations/0013_profile_application_fields.sql's comment for the same
+// boundary applied to what this app stores at all.
+const NEVER_FILL_KEYWORDS = [
+  "voluntary self-identification",
+  "equal employment opportunity",
+  "affirmative action",
+  "race",
+  "ethnicity",
+  "gender identity",
+  "veteran status",
+  "disability status",
+  "decline to self-identify",
+  " eeo",
+]
+
+function isNeverFillField(labelText: string): boolean {
+  const lower = ` ${labelText.toLowerCase()}`
+  return NEVER_FILL_KEYWORDS.some((keyword) => lower.includes(keyword))
+}
+
+/** Pure, unit-testable: classifies a form field's best-guess label text into one of the categories above, longest/most-specific keyword wins. Never matches an EEO/demographic field -- see NEVER_FILL_KEYWORDS. */
 export function matchFieldCategory(labelText: string): FieldCategory | null {
+  if (isNeverFillField(labelText)) return null
   const lower = labelText.toLowerCase()
   let best: { category: FieldCategory; keywordLength: number } | null = null
   for (const [category, keywords] of Object.entries(FIELD_KEYWORDS) as [FieldCategory, readonly string[]][]) {
@@ -111,6 +152,37 @@ async function detectFields(page: Page): Promise<DetectedField[]> {
   }) as any) as Promise<DetectedField[]>
 }
 
+/** Pure, unit-testable: maps a matched field category to the profile value that answers it, or null if this app has nothing to offer for that category. */
+export function fieldValue(category: FieldCategory, params: { profile: Profile; userEmail: string }): string | null {
+  switch (category) {
+    case "name":
+      return params.profile.name
+    case "email":
+      return params.userEmail
+    case "noticePeriod":
+      return params.profile.noticePeriod
+    case "salaryExpectation":
+      return params.profile.salaryExpectation
+    case "relocation":
+      return params.profile.relocationWillingness
+    case "workArrangement":
+      return params.profile.workArrangementPreference
+    case "portfolio":
+      return params.profile.portfolioUrl
+    case "workAuthorization":
+      return params.profile.eligibility.citizenshipOrPr
+    case "sponsorship":
+      return params.profile.eligibility.visaConstraintsNote
+    // phone: no phone field exists in the profile yet (see README's known
+    // limitations). resume/coverLetter: handled separately above as file
+    // inputs, never as text.
+    case "phone":
+    case "resume":
+    case "coverLetter":
+      return null
+  }
+}
+
 export type AutoSubmitOutcome = { status: "ready_to_submit" | "applied"; note: string }
 
 /**
@@ -156,7 +228,7 @@ export async function runFreehireApplication(
         continue
       }
 
-      const value = category === "name" ? params.profile.name : category === "email" ? params.userEmail : null
+      const value = fieldValue(category, params)
       if (value) await page.type(selector, value)
     }
 

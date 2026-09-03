@@ -76,6 +76,11 @@ export interface Profile {
   cvLanguage: string | null
   employmentStatus: string | null
   linkedinHeadline: string | null
+  noticePeriod: string | null
+  salaryExpectation: string | null
+  relocationWillingness: string | null
+  workArrangementPreference: string | null
+  portfolioUrl: string | null
   languages: { language: string; level: string }[]
   education: { degree: string; field: string; yearStart?: string; yearEnd?: string; institution: string; thesis?: string; topics?: string }[]
   experience: { title: string; startDate?: string; endDate?: string; company: string; location?: string; bullets: string[] }[]
