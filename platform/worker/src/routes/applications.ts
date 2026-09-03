@@ -72,6 +72,15 @@ applications.post("/:id/submit", async (c) => {
     return c.json({ error: `application must be ready_to_submit to send (currently "${application.status}")` }, 400)
   }
   if (!application.jobId) return c.json({ error: "this application has no linked job to submit to" }, 400)
+  // Send exactly what was reviewed when this hit ready_to_submit, not
+  // whatever is currently attached -- see setApprovedDocuments's
+  // docstring. Fail closed rather than falling back to cvDocumentId/
+  // coverLetterDocumentId: a ready_to_submit application should always
+  // have these set (autoDraftApplication sets them in the same pass), so
+  // both missing means something's wrong with this record.
+  if (!application.approvedCvDocumentId && !application.approvedCoverLetterDocumentId) {
+    return c.json({ error: "no approved documents on file for this application -- please regenerate and re-confirm it" }, 409)
+  }
 
   const [job, profile, user] = await Promise.all([
     getJob(c.env, application.jobId),
@@ -82,9 +91,13 @@ applications.post("/:id/submit", async (c) => {
   if (!profile || !user) return c.json({ error: "profile not found" }, 404)
 
   const [cvDoc, coverLetterDoc] = await Promise.all([
-    application.cvDocumentId ? getGeneratedDocument(c.env, application.cvDocumentId, userId) : null,
-    application.coverLetterDocumentId ? getGeneratedDocument(c.env, application.coverLetterDocumentId, userId) : null,
+    application.approvedCvDocumentId ? getGeneratedDocument(c.env, application.approvedCvDocumentId, userId) : null,
+    application.approvedCoverLetterDocumentId ? getGeneratedDocument(c.env, application.approvedCoverLetterDocumentId, userId) : null,
   ])
+  if ((application.approvedCvDocumentId && !cvDoc) || (application.approvedCoverLetterDocumentId && !coverLetterDoc)) {
+    await updateApplicationStatus(c.env, application.id, userId, "drafted", "An approved document is missing, please regenerate and re-confirm before sending.")
+    return c.json({ error: "an approved document is missing -- this application was reverted to drafted, please regenerate and re-confirm" }, 409)
+  }
 
   try {
     const outcome = await runFreehireApplication(c.env, { job, profile, userEmail: user.email, cvDoc, coverLetterDoc, submit: true })
