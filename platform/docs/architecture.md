@@ -132,9 +132,11 @@ first attempt pending real-world testing, not a finished integration.
 
 ## What's deliberately not built yet
 
-- LinkedIn and the four Danish portals' scrapers -- ported the same way as
-  `lib/scrapers/freehire.ts`, registered in `lib/scrapers/registry.ts`, but
-  deferred (LinkedIn especially, given anti-scraping risk at platform scale).
+- The four Danish portals' scrapers (jobbank/jobdanmark/jobindex/jobnet) --
+  ported the same way as `lib/scrapers/freehire.ts`, registered in
+  `lib/scrapers/registry.ts`, but deferred as out-of-market for this
+  deployment's default seed (freehire, linkedin, greenhouse, and lever
+  *are* wired up).
 - LinkedIn auto-submission -- see "Auto-apply and auto-submit" above; this
   is an intentional, permanent boundary, not a TODO.
 - Vectorize (semantic job search/dedupe) -- exact-key dedupe covers MVP.
