@@ -35,6 +35,13 @@ export interface ApplicationRow {
   notes: string | null
   cvDocumentId: string | null
   coverLetterDocumentId: string | null
+  // The exact documents reviewed at the moment this application reached
+  // ready_to_submit -- see migrations/0012_approved_documents.sql. The
+  // actual submit pass (POST /:id/submit) uses these, not
+  // cvDocumentId/coverLetterDocumentId, so a later document swap can never
+  // silently change what gets sent.
+  approvedCvDocumentId: string | null
+  approvedCoverLetterDocumentId: string | null
   source: string | null
   deadline: string | null
   createdAt: string
@@ -44,6 +51,7 @@ export interface ApplicationRow {
 const SELECT_COLUMNS = `id, user_id as userId, job_id as jobId, date, company, sector, role, role_type as roleType,
   channel, status, contact_person as contactPerson, fit_rating as fitRating, notes,
   cv_document_id as cvDocumentId, cover_letter_document_id as coverLetterDocumentId,
+  approved_cv_document_id as approvedCvDocumentId, approved_cover_letter_document_id as approvedCoverLetterDocumentId,
   source, deadline, created_at as createdAt, updated_at as updatedAt`
 
 export interface ApplicationInput {
@@ -188,5 +196,29 @@ export async function updateApplicationDocuments(
      WHERE id = ? AND user_id = ?`,
   )
     .bind(docs.cvDocumentId ?? null, docs.coverLetterDocumentId ?? null, new Date().toISOString(), id, userId)
+    .run()
+}
+
+/**
+ * Pins the documents an application's auto-submit "confirm" pass just
+ * filled the form with -- called at the moment status flips to
+ * ready_to_submit. POST /:id/submit reads these back rather than
+ * cvDocumentId/coverLetterDocumentId, so what actually gets sent is
+ * exactly what was reviewed. See migrations/0012_approved_documents.sql.
+ */
+export async function setApprovedDocuments(
+  env: Env,
+  id: string,
+  userId: string,
+  docs: { cvDocumentId: string | null; coverLetterDocumentId: string | null },
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE applications SET
+       approved_cv_document_id = ?,
+       approved_cover_letter_document_id = ?,
+       updated_at = ?
+     WHERE id = ? AND user_id = ?`,
+  )
+    .bind(docs.cvDocumentId, docs.coverLetterDocumentId, new Date().toISOString(), id, userId)
     .run()
 }

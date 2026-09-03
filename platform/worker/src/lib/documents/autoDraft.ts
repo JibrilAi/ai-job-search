@@ -1,7 +1,13 @@
 import type { Env } from "../../types.js"
 import type { JobRow } from "../db/repositories/jobs.js"
 import type { Profile } from "../db/repositories/profiles.js"
-import { createApplication, findApplicationForJob, updateApplicationDocuments, updateApplicationStatus } from "../db/repositories/applications.js"
+import {
+  createApplication,
+  findApplicationForJob,
+  updateApplicationDocuments,
+  updateApplicationStatus,
+  setApprovedDocuments,
+} from "../db/repositories/applications.js"
 import { insertGeneratedDocument, type GeneratedDocumentRow } from "../db/repositories/documents.js"
 import { renderCvHtml } from "./cvTemplate.js"
 import { renderCoverLetterHtml } from "./coverLetterTemplate.js"
@@ -125,6 +131,11 @@ export async function autoDraftApplication(
         coverLetterDoc,
         submit: profile.autoSubmitMode === "unattended",
       })
+      // Pin exactly what was just filled/reviewed -- see
+      // setApprovedDocuments's docstring. Set for both outcomes (not just
+      // ready_to_submit): "unattended" already submitted with these same
+      // docs, and recording them keeps the audit trail honest either way.
+      await setApprovedDocuments(env, application.id, userId, { cvDocumentId: cvDoc?.id ?? null, coverLetterDocumentId: coverLetterDoc?.id ?? null })
       await updateApplicationStatus(env, application.id, userId, outcome.status, outcome.note)
     } catch (err) {
       console.error("auto-draft: freehire auto-submit failed:", err)

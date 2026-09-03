@@ -237,6 +237,8 @@ export interface Application {
   notes: string | null
   cvDocumentId: string | null
   coverLetterDocumentId: string | null
+  approvedCvDocumentId: string | null
+  approvedCoverLetterDocumentId: string | null
   source: string | null
   deadline: string | null
   createdAt: string
