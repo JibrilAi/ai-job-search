@@ -64,6 +64,21 @@ describe("normalizeExtractedProfile", () => {
     expect(profile.certifications).toEqual(["AWS"])
   })
 
+  it("carries through the application-screener fields when present", () => {
+    const profile = normalizeExtractedProfile({
+      noticePeriod: "2 weeks",
+      salaryExpectation: "$120,000-$140,000 CAD",
+      relocationWillingness: "Open to relocating within Canada",
+      workArrangementPreference: "Remote preferred",
+      portfolioUrl: "https://github.com/janedoe",
+    })
+    expect(profile.noticePeriod).toBe("2 weeks")
+    expect(profile.salaryExpectation).toBe("$120,000-$140,000 CAD")
+    expect(profile.relocationWillingness).toBe("Open to relocating within Canada")
+    expect(profile.workArrangementPreference).toBe("Remote preferred")
+    expect(profile.portfolioUrl).toBe("https://github.com/janedoe")
+  })
+
   it("fills in safe defaults for a malformed or empty response instead of throwing", () => {
     const profile = normalizeExtractedProfile({})
     expect(profile.name).toBeNull()
@@ -71,6 +86,11 @@ describe("normalizeExtractedProfile", () => {
     expect(profile.skills).toEqual({ primary: [], secondary: [], domain: [], software: [] })
     expect(profile.behavioral.strengths).toBe("")
     expect(profile.eligibility).toEqual({ citizenshipOrPr: null, visaConstraintsNote: null })
+    expect(profile.noticePeriod).toBeNull()
+    expect(profile.salaryExpectation).toBeNull()
+    expect(profile.relocationWillingness).toBeNull()
+    expect(profile.workArrangementPreference).toBeNull()
+    expect(profile.portfolioUrl).toBeNull()
   })
 
   it("drops non-string entries from string arrays instead of crashing", () => {

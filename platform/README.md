@@ -180,3 +180,12 @@ git-integration auto-deploy configured in the Cloudflare dashboard.
   exists in the profile schema yet, see above). Deliberately does not
   support LinkedIn or any other portal, even with the setting on -- see
   `docs/architecture.md`'s "Auto-apply and auto-submit" section.
+- **Application-screener profile fields** (`migrations/
+  0013_profile_application_fields.sql`: notice period, salary expectation,
+  relocation willingness, work arrangement preference, portfolio URL) and
+  `autoSubmit.ts`'s expanded `FIELD_KEYWORDS` matching for them are new and
+  unverified against a real application form for the same reason as the
+  rest of the auto-submit engine above. Deliberately does not add or
+  auto-fill EEO/voluntary-self-identification fields (race, gender,
+  veteran status, disability) -- see `NEVER_FILL_KEYWORDS` in
+  `autoSubmit.ts` and `docs/architecture.md`.
